@@ -256,6 +256,7 @@ const CycleBuilder: React.FC<{
     const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
     const [groupBy, setGroupBy] = useState('none');
     const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
+    const [lastSelectedItemId, setLastSelectedItemId] = useState<string | null>(null);
 
     const cycleScopes = useMemo(() => scopes.filter(s => s.cycleId === cycle.id), [scopes, cycle.id]);
     const [selectedScopeId, setSelectedScopeId] = useState<string | null>(cycleScopes[0]?.id || null);
@@ -364,14 +365,78 @@ const CycleBuilder: React.FC<{
     const handleRemoveItem = (itemId: string) => {
         setCycleItems(prev => prev.filter(item => item.id !== itemId));
     };
+    
+    const groupedItems = useMemo(() => {
+        if (groupBy === 'none') return null;
+    
+        const groups = itemsInCurrentScope.reduce((acc, item) => {
+            let key: string;
+    
+            switch (groupBy) {
+                case 'assignee': {
+                    const user = users.find(u => u.id === item.assigneeId);
+                    key = user ? user.displayName : 'Unassigned';
+                    break;
+                }
+                case 'result':
+                    key = item.result.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    break;
+                case 'map':
+                    key = item.map || 'No Map';
+                    break;
+                case 'configuration':
+                    key = item.configuration || 'No Configuration';
+                    break;
+                case 'affectedObjectType':
+                    key = item.test.affectedObjectType || 'No Affected Object';
+                    break;
+                default:
+                    key = 'Unknown Group'; // Fallback
+                    break;
+            }
+    
+            if (!acc[key]) {
+                acc[key] = [];
+            }
+            acc[key].push(item);
+            return acc;
+        }, {} as Record<string, typeof itemsInCurrentScope>);
+    
+        return Object.entries(groups).sort(([keyA], [keyB]) => keyA.localeCompare(keyB));
+    }, [itemsInCurrentScope, groupBy, users]);
 
-    const handleSelectItem = (itemId: string) => {
-        setSelectedItemIds(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(itemId)) newSet.delete(itemId);
-            else newSet.add(itemId);
-            return newSet;
-        });
+    const displayedItems = useMemo(() => {
+        return groupedItems ? groupedItems.flatMap(([, items]) => items) : itemsInCurrentScope;
+    }, [groupedItems, itemsInCurrentScope]);
+
+    const handleSelectItem = (itemId: string, event: React.ChangeEvent<HTMLInputElement>) => {
+        const isShiftPressed = (event.nativeEvent as MouseEvent).shiftKey;
+
+        if (isShiftPressed && lastSelectedItemId) {
+            const newSelectedIds = new Set(selectedItemIds);
+            const lastIndex = displayedItems.findIndex(i => i.id === lastSelectedItemId);
+            const currentIndex = displayedItems.findIndex(i => i.id === itemId);
+
+            if (lastIndex !== -1 && currentIndex !== -1) {
+                const start = Math.min(lastIndex, currentIndex);
+                const end = Math.max(lastIndex, currentIndex);
+                for (let i = start; i <= end; i++) {
+                    newSelectedIds.add(displayedItems[i].id);
+                }
+                setSelectedItemIds(newSelectedIds);
+            }
+        } else {
+             setSelectedItemIds(prev => {
+                const newSet = new Set(prev);
+                if (newSet.has(itemId)) {
+                    newSet.delete(itemId);
+                } else {
+                    newSet.add(itemId);
+                }
+                return newSet;
+            });
+            setLastSelectedItemId(itemId);
+        }
     };
 
     const handleSelectAllItems = () => {
@@ -382,6 +447,21 @@ const CycleBuilder: React.FC<{
         }
     };
     
+    const handleSelectGroup = (groupItems: {id: string}[]) => {
+        const groupItemIds = groupItems.map(item => item.id);
+        const allSelected = groupItemIds.every(id => selectedItemIds.has(id));
+
+        if (allSelected) {
+            setSelectedItemIds(prev => {
+                const newSet = new Set(prev);
+                groupItemIds.forEach(id => newSet.delete(id));
+                return newSet;
+            });
+        } else {
+            setSelectedItemIds(prev => new Set([...prev, ...groupItemIds]));
+        }
+    };
+
     const handleBulkEditSave = (changes: BulkCycleItemChanges) => {
         setCycleItems(prev => prev.map(item => 
             selectedItemIds.has(item.id) ? { ...item, ...changes } : item
@@ -391,25 +471,6 @@ const CycleBuilder: React.FC<{
     };
 
     const allUsers = useMemo(() => [{ id: '', displayName: 'Unassigned', email: '' }, ...users], [users]);
-
-    const groupedItems = useMemo(() => {
-        if (groupBy === 'none') return null;
-
-        const groups = itemsInCurrentScope.reduce((acc, item) => {
-            let key: string;
-            if (groupBy === 'assignee') {
-                const user = users.find(u => u.id === item.assigneeId);
-                key = user ? user.displayName : 'Unassigned';
-            } else { // 'result'
-                key = item.result.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-            }
-            if (!acc[key]) acc[key] = [];
-            acc[key].push(item);
-            return acc;
-        }, {} as Record<string, typeof itemsInCurrentScope>);
-
-        return Object.entries(groups).sort(([keyA], [keyB]) => keyA.localeCompare(keyB));
-    }, [itemsInCurrentScope, groupBy, users]);
     
     const existingTestIdsInScope = useMemo(() => new Set(itemsInCurrentScope.map(i => i.testId)), [itemsInCurrentScope]);
 
@@ -520,6 +581,9 @@ const CycleBuilder: React.FC<{
                             <option value="none">None</option>
                             <option value="result">Result</option>
                             <option value="assignee">Assignee</option>
+                            <option value="map">Map</option>
+                            <option value="configuration">Configuration</option>
+                            <option value="affectedObjectType">Affected Object</option>
                         </select>
                     </div>
                     {selectedItemIds.size > 0 && (
@@ -548,14 +612,34 @@ const CycleBuilder: React.FC<{
                    </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                         {groupedItems ? (
-                           groupedItems.map(([groupName, items]) => (
-                               <React.Fragment key={groupName}>
-                                   <tr className="bg-gray-100 dark:bg-gray-800"><td colSpan={7} className="p-2 font-semibold text-gray-800 dark:text-gray-200">{groupName} ({items.length})</td></tr>
-                                   {items.map(item => (
-                                     <CycleTestRow key={item.id} item={item} allUsers={allUsers} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} />
-                                   ))}
-                               </React.Fragment>
-                           ))
+                           groupedItems.map(([groupName, items]) => {
+                                const groupItemIds = items.map(i => i.id);
+                                const allSelectedInGroup = groupItemIds.length > 0 && groupItemIds.every(id => selectedItemIds.has(id));
+                                const someSelectedInGroup = groupItemIds.some(id => selectedItemIds.has(id));
+                               return (
+                                   <React.Fragment key={groupName}>
+                                       <tr className="bg-gray-100 dark:bg-gray-800 sticky top-10 z-[5]">
+                                           <td colSpan={7} className="p-2 font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-200 dark:border-gray-700">
+                                               <div className="flex items-center">
+                                                   <input
+                                                       type="checkbox"
+                                                       ref={el => {
+                                                           if (el) { el.indeterminate = someSelectedInGroup && !allSelectedInGroup; }
+                                                       }}
+                                                       checked={allSelectedInGroup}
+                                                       onChange={() => handleSelectGroup(items)}
+                                                       className="h-4 w-4 bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-600 rounded text-blue-accent focus:ring-blue-accent mr-3"
+                                                   />
+                                                   {groupName} ({items.length})
+                                               </div>
+                                           </td>
+                                       </tr>
+                                       {items.map(item => (
+                                         <CycleTestRow key={item.id} item={item} allUsers={allUsers} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} />
+                                       ))}
+                                   </React.Fragment>
+                               )
+                           })
                         ) : (
                             itemsInCurrentScope.map(item => (
                                <CycleTestRow key={item.id} item={item} allUsers={allUsers} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} />
@@ -576,11 +660,11 @@ const CycleTestRow: React.FC<{
     allUsers: User[];
     onUpdateItem: (id: string, updates: Partial<CycleItem>) => void;
     onRemoveItem: (id: string) => void;
-    onSelectItem: (id: string) => void;
+    onSelectItem: (id: string, event: React.ChangeEvent<HTMLInputElement>) => void;
     isSelected: boolean;
 }> = ({ item, allUsers, onUpdateItem, onRemoveItem, onSelectItem, isSelected }) => (
     <tr className={isSelected ? 'bg-blue-accent/20' : 'hover:bg-gray-100/50 dark:hover:bg-gray-800/50'}>
-        <td className="p-2"><input type="checkbox" checked={isSelected} onChange={() => onSelectItem(item.id)} className="h-4 w-4 bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-600 rounded text-blue-accent focus:ring-blue-accent"/></td>
+        <td className="p-2"><input type="checkbox" checked={isSelected} onChange={(e) => onSelectItem(item.id, e)} className="h-4 w-4 bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-600 rounded text-blue-accent focus:ring-blue-accent"/></td>
         <td className="p-2 font-medium text-sm text-gray-900 dark:text-gray-100">{item.testSnapshot.name}</td>
         <td className="p-2">
             <select
