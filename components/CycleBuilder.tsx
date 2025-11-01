@@ -57,7 +57,7 @@ const AddTestsModal: React.FC<{
   };
   
   const handleMultiSelectChange = (setter: React.Dispatch<React.SetStateAction<string[]>>) => (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const options = Array.from(e.target.selectedOptions, option => option.value);
+      const options = [...e.target.selectedOptions].map(option => option.value);
       setter(options);
   };
 
@@ -128,7 +128,12 @@ const BulkCycleItemEditModal: React.FC<{
   count: number;
 }> = ({ onClose, onSave, count }) => {
   const { users, maps, configurations } = useData();
-  const [updates, setUpdates] = useState<BulkCycleItemChanges>({});
+  const [updates, setUpdates] = useState<BulkCycleItemChanges>(() => ({
+    assigneeId: null,
+    result: CycleItemResult.NOT_RUN,
+    map: '',
+    configuration: '',
+  }));
   const [enabledFields, setEnabledFields] = useState<Set<keyof BulkCycleItemChanges>>(new Set());
 
   const handleToggleField = (field: keyof BulkCycleItemChanges) => {
@@ -142,9 +147,7 @@ const BulkCycleItemEditModal: React.FC<{
 
   const handleSubmit = () => {
     const finalChanges: BulkCycleItemChanges = {};
-    // FIX: The previous implementation using forEach caused a TypeScript error because it
-    // couldn't correctly infer the types when assigning to a dynamic property.
-    // This explicit approach is type-safe.
+    
     if (enabledFields.has('assigneeId')) {
       finalChanges.assigneeId = updates.assigneeId;
     }
