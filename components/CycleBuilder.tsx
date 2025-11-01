@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Cycle, Test, CycleItem, CycleItemResult, User, CycleStatus, Scope, ScopeName, Priority } from '../types';
+// Fix: Imported 'Folder' type to resolve reference error.
+import { Cycle, Test, CycleItem, CycleItemResult, User, CycleStatus, Scope, ScopeName, Priority, Folder } from '../types';
 import { useData } from './DataContext';
 import { buildFolderTree } from '../data/mockData';
 import FolderTree from './FolderTree';
@@ -12,6 +13,17 @@ import { XCircleIcon } from './icons/XCircleIcon';
 import { StopCircleIcon } from './icons/StopCircleIcon';
 import { ClockIcon } from './icons/ClockIcon';
 
+const PriorityBadge: React.FC<{ priority: Priority }> = ({ priority }) => {
+    const styles = {
+        [Priority.P0]: 'bg-red-500 border-red-500',
+        [Priority.P1]: 'bg-orange-500 border-orange-500',
+        [Priority.P2]: 'bg-yellow-500 border-yellow-500',
+        [Priority.P3]: 'bg-blue-500 border-blue-500',
+    };
+    return <span className={`px-2 py-0.5 text-xs font-semibold text-white rounded-full border ${styles[priority]}`}>{priority}</span>
+}
+
+
 const AddTestsModal: React.FC<{
   onClose: () => void;
   onAddTests: (tests: Test[], maps: string[], configs: string[]) => void;
@@ -23,14 +35,37 @@ const AddTestsModal: React.FC<{
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(folders.map(f => f.id)));
   const [selectedMaps, setSelectedMaps] = useState<string[]>([]);
   const [selectedConfigs, setSelectedConfigs] = useState<string[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(folders[0]?.id || null);
 
-  const folderTree = useMemo(() => {
-    let testsToDisplay = tests;
-    if(searchTerm) {
-        testsToDisplay = tests.filter(t => t.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  const folderTreeForNav = useMemo(() => buildFolderTree(folders, []), [folders]);
+
+  const getAllChildFolderIds = useCallback((folderId: string, allFolders: Omit<Folder, 'children' | 'tests'>[]): string[] => {
+    let ids: string[] = [];
+    const children = allFolders.filter(f => f.parentId === folderId);
+    if (children.length === 0) return [];
+    for (const child of children) {
+        ids.push(child.id);
+        ids = [...ids, ...getAllChildFolderIds(child.id, allFolders)];
     }
-    return buildFolderTree(folders, testsToDisplay);
-  }, [folders, tests, searchTerm]);
+    return ids;
+  }, []);
+
+  const filteredTests = useMemo(() => {
+    let testsToShow = tests;
+    if (selectedFolderId) {
+      const folderIdsToShow = [selectedFolderId, ...getAllChildFolderIds(selectedFolderId, folders)];
+      testsToShow = tests.filter(test => folderIdsToShow.includes(test.folderId));
+    }
+    
+    if (searchTerm) {
+        const lowercasedFilter = searchTerm.toLowerCase();
+        testsToShow = testsToShow.filter(test => 
+            test.name.toLowerCase().includes(lowercasedFilter) ||
+            test.labels.some(label => label.toLowerCase().includes(lowercasedFilter))
+        );
+    }
+    return testsToShow;
+  }, [tests, selectedFolderId, searchTerm, folders, getAllChildFolderIds]);
 
   const toggleFolder = (folderId: string) => {
     setExpandedFolders(prev => {
@@ -43,13 +78,24 @@ const AddTestsModal: React.FC<{
 
   const handleSelectTest = (test: Test) => {
     if (existingTestIds.has(test.id)) return;
+    setSelectedTests(prev => {
+      const newMap = new Map(prev);
+      if (newMap.has(test.id)) newMap.delete(test.id);
+      else newMap.set(test.id, test);
+      return newMap;
+    });
+  };
+
+  const handleSelectAllVisible = () => {
+    const testsToToggle = filteredTests.filter(t => !existingTestIds.has(t.id));
+    const allVisibleSelected = testsToToggle.length > 0 && testsToToggle.every(t => selectedTests.has(t.id));
 
     setSelectedTests(prev => {
       const newMap = new Map(prev);
-      if (newMap.has(test.id)) {
-        newMap.delete(test.id);
+      if (allVisibleSelected) {
+        testsToToggle.forEach(t => newMap.delete(t.id));
       } else {
-        newMap.set(test.id, test);
+        testsToToggle.forEach(t => newMap.set(t.id, t));
       }
       return newMap;
     });
@@ -61,39 +107,96 @@ const AddTestsModal: React.FC<{
   };
   
   const handleMultiSelectChange = (setter: React.Dispatch<React.SetStateAction<string[]>>) => (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const options = [...e.target.selectedOptions].map(option => option.value);
-      setter(options);
+    const options = [...e.target.selectedOptions].map(option => option.value);
+    setter(options);
   };
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onMouseDown={onClose}>
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl h-[90vh] flex flex-col" onMouseDown={e => e.stopPropagation()}>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-6xl h-[90vh] flex flex-col" onMouseDown={e => e.stopPropagation()}>
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
             <h2 className="text-xl font-bold">Add Tests from Library</h2>
-            <input 
+        </div>
+        <div className="flex-1 flex overflow-hidden">
+          <aside className="w-1/3 border-r border-gray-200 dark:border-gray-700 p-4 overflow-y-auto">
+            <FolderTree
+              folders={folderTreeForNav}
+              selectedFolderId={selectedFolderId}
+              onSelectFolder={setSelectedFolderId}
+              onDropTest={() => {}}
+              onDropFolder={() => {}}
+              expandedFolders={expandedFolders}
+              onToggleFolder={toggleFolder}
+              isCycleBuilder={false} // Use standard navigation behavior
+            />
+          </aside>
+          <main className="w-2/3 flex flex-col overflow-hidden">
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+              <input 
                 type="search"
-                placeholder="Search tests..."
+                placeholder="Search tests in selected folder..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                className="mt-2 w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5"
-            />
+                className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 focus:ring-2 focus:ring-blue-accent focus:outline-none"
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <table className="w-full text-left">
+                <thead className="sticky top-0 bg-gray-50/80 dark:bg-gray-800/80 backdrop-blur-sm z-10">
+                  <tr>
+                    <th className="p-2 w-12">
+                      <input
+                        type="checkbox"
+                        onChange={handleSelectAllVisible}
+                        ref={el => {
+                            if (!el) return;
+                            const selectableTests = filteredTests.filter(t => !existingTestIds.has(t.id));
+                            if (selectableTests.length === 0) {
+                                el.checked = false;
+                                el.indeterminate = false;
+                                return;
+                            }
+                            const numSelected = selectableTests.filter(t => selectedTests.has(t.id)).length;
+                            el.checked = numSelected === selectableTests.length;
+                            el.indeterminate = numSelected > 0 && numSelected < selectableTests.length;
+                        }}
+                        className="h-4 w-4 bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-600 rounded text-blue-accent focus:ring-blue-accent ml-3"
+                      />
+                    </th>
+                    <th className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Name</th>
+                    <th className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Priority</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                  {filteredTests.map(test => {
+                    const isExisting = existingTestIds.has(test.id);
+                    const isSelected = selectedTests.has(test.id);
+                    return (
+                      <tr
+                        key={test.id}
+                        onClick={() => handleSelectTest(test)}
+                        className={`border-b border-gray-200/50 dark:border-gray-700/50 ${isSelected ? 'bg-blue-accent/20' : ''} ${isExisting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-800/50'}`}
+                      >
+                        <td className="p-2 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected || isExisting}
+                            disabled={isExisting}
+                            onChange={() => {}}
+                            className="h-4 w-4 bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-600 rounded text-blue-accent focus:ring-blue-accent ml-3"
+                          />
+                        </td>
+                        <td className="p-2 text-sm font-medium text-gray-900 dark:text-gray-100">{test.name}</td>
+                        <td className="p-2"><PriorityBadge priority={test.priority} /></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </main>
         </div>
-        <div className="flex-1 overflow-y-auto p-4">
-           <FolderTree
-             folders={folderTree}
-             selectedFolderId={null}
-             onSelectFolder={() => {}}
-             onDropTest={() => {}}
-             onDropFolder={() => {}}
-             expandedFolders={expandedFolders}
-             onToggleFolder={toggleFolder}
-             isCycleBuilder
-             onSelectTestInModal={handleSelectTest}
-             modalSelectedTestIds={new Set(selectedTests.keys())}
-             modalExistingTestIds={existingTestIds}
-           />
-        </div>
-        <div className="flex justify-between items-center space-x-3 p-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex justify-between items-center space-x-3 p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 rounded-b-lg">
           <div className="flex gap-4">
               <div>
                   <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Add for Maps</label>

@@ -1,5 +1,4 @@
 import React from 'react';
-// FIX: Import Test type for onSelectTest prop
 import { Folder, Test } from '../types';
 import { FolderIcon } from './icons/FolderIcon';
 import { FileIcon } from './icons/FileIcon';
@@ -16,15 +15,10 @@ interface FolderTreeProps {
   isCycleBuilder?: boolean;
   expandedFolders: Set<string>;
   onToggleFolder: (id: string) => void;
-  // FIX: Add onSelectTest prop for cycle builder functionality
   onSelectTest?: (test: Test) => void;
-  // MODAL PROPS
-  onSelectTestInModal?: (test: Test) => void;
-  modalSelectedTestIds?: Set<string>;
-  modalExistingTestIds?: Set<string>;
 }
 
-const FolderTree: React.FC<FolderTreeProps> = ({ folders, selectedFolderId, onSelectFolder, onDropTest, onDropFolder, onDeleteFolder, isCycleBuilder, expandedFolders, onToggleFolder, onSelectTest, onSelectTestInModal, modalSelectedTestIds, modalExistingTestIds }) => {
+const FolderTree: React.FC<FolderTreeProps> = ({ folders, selectedFolderId, onSelectFolder, onDropTest, onDropFolder, onDeleteFolder, isCycleBuilder, expandedFolders, onToggleFolder, onSelectTest }) => {
   return (
     <div className="space-y-1">
       {folders.map(folder => (
@@ -40,12 +34,7 @@ const FolderTree: React.FC<FolderTreeProps> = ({ folders, selectedFolderId, onSe
             isCycleBuilder={isCycleBuilder}
             expandedFolders={expandedFolders}
             onToggleFolder={onToggleFolder}
-            // FIX: Pass onSelectTest to FolderTreeItem
             onSelectTest={onSelectTest}
-            // MODAL PROPS
-            onSelectTestInModal={onSelectTestInModal}
-            modalSelectedTestIds={modalSelectedTestIds}
-            modalExistingTestIds={modalExistingTestIds}
         />
       ))}
     </div>

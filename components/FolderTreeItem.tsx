@@ -1,5 +1,4 @@
 import React, { useMemo } from 'react';
-// FIX: Import Test type for onSelectTest prop
 import { Folder, Test } from '../types';
 import { FolderIcon } from './icons/FolderIcon';
 import { FileIcon } from './icons/FileIcon';
@@ -18,13 +17,9 @@ interface FolderTreeItemProps {
   expandedFolders: Set<string>;
   onToggleFolder: (id:string) => void;
   onSelectTest?: (test: Test) => void;
-  // MODAL PROPS
-  onSelectTestInModal?: (test: Test) => void;
-  modalSelectedTestIds?: Set<string>;
-  modalExistingTestIds?: Set<string>;
 }
 
-const FolderTreeItem: React.FC<FolderTreeItemProps> = ({ folder, level, selectedFolderId, onSelectFolder, onDropTest, onDropFolder, onDeleteFolder, isCycleBuilder = false, expandedFolders, onToggleFolder, onSelectTest, onSelectTestInModal, modalSelectedTestIds, modalExistingTestIds }) => {
+const FolderTreeItem: React.FC<FolderTreeItemProps> = ({ folder, level, selectedFolderId, onSelectFolder, onDropTest, onDropFolder, onDeleteFolder, isCycleBuilder = false, expandedFolders, onToggleFolder }) => {
   const isOpen = expandedFolders.has(folder.id);
 
   const handleDragStart = (e: React.DragEvent, type: 'test' | 'folder', id: string) => {
@@ -52,18 +47,6 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({ folder, level, selected
 
   const isSelected = selectedFolderId === folder.id;
 
-  // FIX: Prepare tests for rendering, adding modal-specific properties if needed.
-  const testsToRender: (Test & {isSelected?: boolean, isExisting?: boolean})[] = useMemo(() => {
-    if (isCycleBuilder) {
-        return folder.tests.map(t => ({
-            ...t,
-            isSelected: modalSelectedTestIds?.has(t.id),
-            isExisting: modalExistingTestIds?.has(t.id)
-        }));
-    }
-    return folder.tests;
-  }, [folder.tests, isCycleBuilder, modalSelectedTestIds, modalExistingTestIds]);
-
   return (
     <div>
       <div
@@ -74,7 +57,6 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({ folder, level, selected
         onClick={() => onSelectFolder(folder.id)}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
-        // FIX: Disable dragging for folders in cycle builder view
         draggable={!isCycleBuilder}
         onDragStart={isCycleBuilder ? undefined : (e) => handleDragStart(e, 'folder', folder.id)}
       >
@@ -117,34 +99,21 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({ folder, level, selected
                     isCycleBuilder={isCycleBuilder}
                     expandedFolders={expandedFolders}
                     onToggleFolder={onToggleFolder}
-                    onSelectTest={onSelectTest}
-                    onSelectTestInModal={onSelectTestInModal}
-                    modalSelectedTestIds={modalSelectedTestIds}
-                    modalExistingTestIds={modalExistingTestIds}
                 />
             ))}
-            {testsToRender.map((test) => {
-                 const testClasses = isCycleBuilder 
-                    ? test.isExisting 
-                        ? 'opacity-50 cursor-not-allowed'
-                        : test.isSelected
-                            ? 'bg-blue-accent/20'
-                            : 'cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-800'
-                    : '';
-                return (
+            {!isCycleBuilder && folder.tests.map((test) => (
                  <div 
                     key={test.id} 
-                    className={`flex items-center p-1.5 ml-1 rounded-md ${testClasses}`}
+                    className={`flex items-center p-1.5 ml-1 rounded-md`}
                     style={{ paddingLeft: `${level * 1.25 + 0.5}rem` }}
-                    draggable={!isCycleBuilder}
-                    onDragStart={isCycleBuilder ? undefined : (e) => handleDragStart(e, 'test', test.id)}
-                    onClick={isCycleBuilder && onSelectTestInModal ? () => onSelectTestInModal(test) : undefined}
-                    title={isCycleBuilder ? (test.isExisting ? `"${test.name}" is already in this scope` : `Add "${test.name}" to cycle`) : test.name}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, 'test', test.id)}
+                    title={test.name}
                 >
                     <FileIcon className="w-5 h-5 mr-2 text-gray-500 dark:text-gray-400" />
                     <span className="truncate text-sm text-gray-700 dark:text-gray-300">{test.name}</span>
                 </div>
-            )})}
+            ))}
         </div>
       )}
     </div>
