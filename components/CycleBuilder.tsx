@@ -358,7 +358,7 @@ const CycleBuilder: React.FC<{
   onBack: () => void;
   onUpdateCycle: (cycle: Cycle) => void;
 }> = ({ cycle, onBack, onUpdateCycle }) => {
-    const { cycleItems, setCycleItems, users, scopes, setScopes, tests } = useData();
+    const { cycleItems, setCycleItems, users, scopes, setScopes, tests, maps, configurations } = useData();
     const [editingCycle, setEditingCycle] = useState<Cycle>(cycle);
     const [isAddTestModalOpen, setIsAddTestModalOpen] = useState(false);
     const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
@@ -600,6 +600,12 @@ const CycleBuilder: React.FC<{
 
     return (
         <div className="flex flex-col h-full p-6 overflow-hidden">
+            <datalist id="maps-datalist">
+                {maps.map(map => <option key={map} value={map} />)}
+            </datalist>
+            <datalist id="configurations-datalist">
+                {configurations.map(config => <option key={config} value={config} />)}
+            </datalist>
              {isAddTestModalOpen && (
                 <AddTestsModal 
                     onClose={() => setIsAddTestModalOpen(false)} 
@@ -655,7 +661,7 @@ const CycleBuilder: React.FC<{
                         <div className="space-y-2 max-h-48 overflow-y-auto">
                             {(editingCycle.mapsInfo || []).map((info, index) => (
                                 <div key={index} className="flex items-center gap-2">
-                                    <input type="text" placeholder="Map Name" value={info.mapName} onChange={e => handleMapsInfoChange(index, 'mapName', e.target.value)} className="w-1/3 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1"/>
+                                    <input type="text" list="maps-datalist" placeholder="Map Name" value={info.mapName} onChange={e => handleMapsInfoChange(index, 'mapName', e.target.value)} className="w-1/3 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1"/>
                                     <input type="text" placeholder="URL" value={info.link} onChange={e => handleMapsInfoChange(index, 'link', e.target.value)} className="flex-1 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1"/>
                                     <button onClick={() => removeMapInfo(index)} className="text-gray-400 hover:text-red-500"><TrashIcon className="w-4 h-4"/></button>
                                 </div>
@@ -814,8 +820,24 @@ const CycleTestRow: React.FC<{
                 {allUsers.map(user => <option key={user.id} value={user.id}>{user.displayName}</option>)}
             </select>
         </td>
-        <td className="p-2 text-sm text-gray-600 dark:text-gray-400">{item.map}</td>
-        <td className="p-2 text-sm text-gray-600 dark:text-gray-400">{item.configuration}</td>
+        <td className="p-1">
+            <input
+                type="text"
+                list="maps-datalist"
+                value={item.map || ''}
+                onChange={e => onUpdateItem(item.id, { map: e.target.value || null })}
+                className="w-full bg-transparent text-sm p-1 rounded-md border border-transparent text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 focus:ring-1 focus:ring-blue-accent focus:border-blue-accent focus:bg-white dark:focus:bg-gray-700"
+            />
+        </td>
+        <td className="p-1">
+            <input
+                type="text"
+                list="configurations-datalist"
+                value={item.configuration || ''}
+                onChange={e => onUpdateItem(item.id, { configuration: e.target.value || null })}
+                className="w-full bg-transparent text-sm p-1 rounded-md border border-transparent text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 focus:ring-1 focus:ring-blue-accent focus:border-blue-accent focus:bg-white dark:focus:bg-gray-700"
+            />
+        </td>
         <td className="p-2">
             <select
                 value={item.result}
