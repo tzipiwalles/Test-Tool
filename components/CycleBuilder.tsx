@@ -7,6 +7,10 @@ import { ChevronLeftIcon } from './icons/ChevronLeftIcon';
 import { PlusIcon } from './icons/PlusIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { SaveIcon } from './icons/SaveIcon';
+import { CheckCircleIcon } from './icons/CheckCircleIcon';
+import { XCircleIcon } from './icons/XCircleIcon';
+import { StopCircleIcon } from './icons/StopCircleIcon';
+import { ClockIcon } from './icons/ClockIcon';
 
 const AddTestsModal: React.FC<{
   onClose: () => void;
@@ -464,10 +468,21 @@ const CycleBuilder: React.FC<{
 
     const handleBulkEditSave = (changes: BulkCycleItemChanges) => {
         setCycleItems(prev => prev.map(item => 
-            selectedItemIds.has(item.id) ? { ...item, ...changes } : item
+            selectedItemIds.has(item.id) ? { ...item, ...changes, updatedAt: new Date().toLocaleDateString() } : item
         ));
         setIsBulkEditModalOpen(false);
         setSelectedItemIds(new Set());
+    };
+
+    const handleBulkStatusChange = (result: CycleItemResult) => {
+        if (selectedItemIds.size === 0) return;
+        setCycleItems(prev =>
+            prev.map(item =>
+                selectedItemIds.has(item.id) ? { ...item, result: result, updatedAt: new Date().toLocaleDateString() } : item
+            )
+        );
+        setSelectedItemIds(new Set());
+        setLastSelectedItemId(null);
     };
 
     const allUsers = useMemo(() => [{ id: '', displayName: 'Unassigned', email: '' }, ...users], [users]);
@@ -586,10 +601,25 @@ const CycleBuilder: React.FC<{
                             <option value="affectedObjectType">Affected Object</option>
                         </select>
                     </div>
-                    {selectedItemIds.size > 0 && (
-                        <button onClick={() => setIsBulkEditModalOpen(true)} className="px-3 py-1 text-sm rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">
-                           Bulk Edit ({selectedItemIds.size})
-                        </button>
+                     {selectedItemIds.size > 0 && (
+                        <div className="flex items-center gap-1 border border-gray-300 dark:border-gray-600 rounded-md p-0.5">
+                            <button onClick={() => setIsBulkEditModalOpen(true)} className="px-3 py-1 text-sm rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">
+                               Bulk Edit ({selectedItemIds.size})
+                            </button>
+                            <div className="h-5 w-px bg-gray-300 dark:bg-gray-600 mx-1"></div>
+                             <button onClick={() => handleBulkStatusChange(CycleItemResult.PASSED)} title="Mark as Passed" className="p-1 rounded-md hover:bg-green-100 dark:hover:bg-green-900/50">
+                                <CheckCircleIcon className="w-5 h-5 text-green-500"/>
+                            </button>
+                            <button onClick={() => handleBulkStatusChange(CycleItemResult.FAILED)} title="Mark as Failed" className="p-1 rounded-md hover:bg-red-100 dark:hover:bg-red-900/50">
+                                <XCircleIcon className="w-5 h-5 text-red-500"/>
+                            </button>
+                            <button onClick={() => handleBulkStatusChange(CycleItemResult.BLOCKED)} title="Mark as Blocked" className="p-1 rounded-md hover:bg-yellow-100 dark:hover:bg-yellow-900/50">
+                                <StopCircleIcon className="w-5 h-5 text-yellow-500"/>
+                            </button>
+                            <button onClick={() => handleBulkStatusChange(CycleItemResult.NOT_RUN)} title="Mark as Not Run" className="p-1 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700">
+                                <ClockIcon className="w-5 h-5 text-gray-500 dark:text-gray-400"/>
+                            </button>
+                         </div>
                     )}
                 </div>
                 <button onClick={() => setIsAddTestModalOpen(true)} className="flex items-center bg-blue-accent text-white px-4 py-1.5 rounded-md hover:bg-blue-600 transition-colors text-sm">
