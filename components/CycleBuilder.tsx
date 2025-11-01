@@ -27,8 +27,8 @@ const PriorityBadge: React.FC<{ priority: Priority }> = ({ priority }) => {
 const AddTestsModal: React.FC<{
   onClose: () => void;
   onAddTests: (tests: Test[], maps: string[], configs: string[]) => void;
-  existingTestIds: Set<string>;
-}> = ({ onClose, onAddTests, existingTestIds }) => {
+  existingTestCounts: Map<string, number>;
+}> = ({ onClose, onAddTests, existingTestCounts }) => {
   const { tests, folders, maps, configurations } = useData();
   const [selectedTests, setSelectedTests] = useState<Map<string, Test>>(new Map());
   const [searchTerm, setSearchTerm] = useState('');
@@ -77,7 +77,6 @@ const AddTestsModal: React.FC<{
   };
 
   const handleSelectTest = (test: Test) => {
-    if (existingTestIds.has(test.id)) return;
     setSelectedTests(prev => {
       const newMap = new Map(prev);
       if (newMap.has(test.id)) newMap.delete(test.id);
@@ -87,7 +86,7 @@ const AddTestsModal: React.FC<{
   };
 
   const handleSelectAllVisible = () => {
-    const testsToToggle = filteredTests.filter(t => !existingTestIds.has(t.id));
+    const testsToToggle = filteredTests;
     const allVisibleSelected = testsToToggle.length > 0 && testsToToggle.every(t => selectedTests.has(t.id));
 
     setSelectedTests(prev => {
@@ -150,7 +149,7 @@ const AddTestsModal: React.FC<{
                         onChange={handleSelectAllVisible}
                         ref={el => {
                             if (!el) return;
-                            const selectableTests = filteredTests.filter(t => !existingTestIds.has(t.id));
+                            const selectableTests = filteredTests;
                             if (selectableTests.length === 0) {
                                 el.checked = false;
                                 el.indeterminate = false;
@@ -169,24 +168,26 @@ const AddTestsModal: React.FC<{
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                   {filteredTests.map(test => {
-                    const isExisting = existingTestIds.has(test.id);
                     const isSelected = selectedTests.has(test.id);
+                    const countInCycle = existingTestCounts.get(test.id) || 0;
                     return (
                       <tr
                         key={test.id}
                         onClick={() => handleSelectTest(test)}
-                        className={`border-b border-gray-200/50 dark:border-gray-700/50 ${isSelected ? 'bg-blue-accent/20' : ''} ${isExisting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-800/50'}`}
+                        className={`border-b border-gray-200/50 dark:border-gray-700/50 ${isSelected ? 'bg-blue-accent/20' : ''} cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-800/50`}
                       >
                         <td className="p-2 text-center">
                           <input
                             type="checkbox"
-                            checked={isSelected || isExisting}
-                            disabled={isExisting}
+                            checked={isSelected}
                             onChange={() => {}}
                             className="h-4 w-4 bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-600 rounded text-blue-accent focus:ring-blue-accent ml-3"
                           />
                         </td>
-                        <td className="p-2 text-sm font-medium text-gray-900 dark:text-gray-100">{test.name}</td>
+                        <td className="p-2 text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {test.name}
+                          {countInCycle > 0 && <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 font-normal">in cycle ({countInCycle})</span>}
+                        </td>
                         <td className="p-2"><PriorityBadge priority={test.priority} /></td>
                       </tr>
                     );
@@ -449,7 +450,7 @@ const CycleBuilder: React.FC<{
     
         const newItems: CycleItem[] = testsToAdd.flatMap(test =>
             combinations.map(({ map, config }) => ({
-                id: `ci-${Date.now()}-${test.id}-${map}-${config}`,
+                id: `ci-${Date.now()}-${test.id}-${map}-${config}-${Math.random().toString(36).substring(2, 9)}`,
                 cycleId: cycle.id,
                 scopeId: selectedScopeId,
                 testId: test.id,
@@ -590,7 +591,12 @@ const CycleBuilder: React.FC<{
 
     const allUsers = useMemo(() => [{ id: '', displayName: 'Unassigned', email: '' }, ...users], [users]);
     
-    const existingTestIdsInScope = useMemo(() => new Set(itemsInCurrentScope.map(i => i.testId)), [itemsInCurrentScope]);
+    const existingTestCountsInScope = useMemo(() => {
+        return itemsInCurrentScope.reduce((acc, item) => {
+            acc.set(item.testId, (acc.get(item.testId) || 0) + 1);
+            return acc;
+        }, new Map<string, number>());
+      }, [itemsInCurrentScope]);
 
     return (
         <div className="flex flex-col h-full p-6 overflow-hidden">
@@ -598,7 +604,7 @@ const CycleBuilder: React.FC<{
                 <AddTestsModal 
                     onClose={() => setIsAddTestModalOpen(false)} 
                     onAddTests={handleAddTests}
-                    existingTestIds={existingTestIdsInScope}
+                    existingTestCounts={existingTestCountsInScope}
                 />
             )}
             {isBulkEditModalOpen && (
