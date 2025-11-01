@@ -1,5 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
-// Fix: Imported 'Folder' type to resolve reference error.
+import React, { useState, useMemo, useCallback } from 'react';
 import { Cycle, Test, CycleItem, CycleItemResult, User, CycleStatus, Scope, ScopeName, Priority, Folder } from '../types';
 import { useData } from './DataContext';
 import { buildFolderTree } from '../data/mockData';
@@ -12,6 +11,7 @@ import { CheckCircleIcon } from './icons/CheckCircleIcon';
 import { XCircleIcon } from './icons/XCircleIcon';
 import { StopCircleIcon } from './icons/StopCircleIcon';
 import { ClockIcon } from './icons/ClockIcon';
+import EditableDatalistInput from './EditableDatalistInput';
 
 const PriorityBadge: React.FC<{ priority: Priority }> = ({ priority }) => {
     const styles = {
@@ -126,7 +126,6 @@ const AddTestsModal: React.FC<{
               onDropFolder={() => {}}
               expandedFolders={expandedFolders}
               onToggleFolder={toggleFolder}
-              isCycleBuilder={false} // Use standard navigation behavior
             />
           </aside>
           <main className="w-2/3 flex flex-col overflow-hidden">
@@ -235,7 +234,7 @@ const BulkCycleItemEditModal: React.FC<{
   onSave: (changes: BulkCycleItemChanges) => void;
   count: number;
 }> = ({ onClose, onSave, count }) => {
-  const { users, maps, configurations } = useData();
+  const { users } = useData();
   const [updates, setUpdates] = useState<BulkCycleItemChanges>(() => ({
     assigneeId: null,
     result: CycleItemResult.NOT_RUN,
@@ -600,12 +599,6 @@ const CycleBuilder: React.FC<{
 
     return (
         <div className="flex flex-col h-full p-6 overflow-hidden">
-            <datalist id="maps-datalist">
-                {maps.map(map => <option key={map} value={map} />)}
-            </datalist>
-            <datalist id="configurations-datalist">
-                {configurations.map(config => <option key={config} value={config} />)}
-            </datalist>
              {isAddTestModalOpen && (
                 <AddTestsModal 
                     onClose={() => setIsAddTestModalOpen(false)} 
@@ -661,7 +654,14 @@ const CycleBuilder: React.FC<{
                         <div className="space-y-2 max-h-48 overflow-y-auto">
                             {(editingCycle.mapsInfo || []).map((info, index) => (
                                 <div key={index} className="flex items-center gap-2">
-                                    <input type="text" list="maps-datalist" placeholder="Map Name" value={info.mapName} onChange={e => handleMapsInfoChange(index, 'mapName', e.target.value)} className="w-1/3 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1"/>
+                                     <EditableDatalistInput
+                                        className="w-1/3"
+                                        inputClassName="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1"
+                                        value={info.mapName}
+                                        onChange={value => handleMapsInfoChange(index, 'mapName', value || '')}
+                                        options={maps}
+                                        placeholder="Map Name"
+                                    />
                                     <input type="text" placeholder="URL" value={info.link} onChange={e => handleMapsInfoChange(index, 'link', e.target.value)} className="flex-1 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1"/>
                                     <button onClick={() => removeMapInfo(index)} className="text-gray-400 hover:text-red-500"><TrashIcon className="w-4 h-4"/></button>
                                 </div>
@@ -780,14 +780,14 @@ const CycleBuilder: React.FC<{
                                            </td>
                                        </tr>
                                        {items.map(item => (
-                                         <CycleTestRow key={item.id} item={item} allUsers={allUsers} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} />
+                                         <CycleTestRow key={item.id} item={item} allUsers={allUsers} maps={maps} configurations={configurations} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} />
                                        ))}
                                    </React.Fragment>
                                )
                            })
                         ) : (
                             itemsInCurrentScope.map(item => (
-                               <CycleTestRow key={item.id} item={item} allUsers={allUsers} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} />
+                               <CycleTestRow key={item.id} item={item} allUsers={allUsers} maps={maps} configurations={configurations} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} />
                             ))
                         )}
                          {itemsInCurrentScope.length === 0 && (
@@ -803,11 +803,13 @@ const CycleBuilder: React.FC<{
 const CycleTestRow: React.FC<{
     item: any;
     allUsers: User[];
+    maps: string[];
+    configurations: string[];
     onUpdateItem: (id: string, updates: Partial<CycleItem>) => void;
     onRemoveItem: (id: string) => void;
     onSelectItem: (id: string, event: React.ChangeEvent<HTMLInputElement>) => void;
     isSelected: boolean;
-}> = ({ item, allUsers, onUpdateItem, onRemoveItem, onSelectItem, isSelected }) => (
+}> = ({ item, allUsers, maps, configurations, onUpdateItem, onRemoveItem, onSelectItem, isSelected }) => (
     <tr className={isSelected ? 'bg-blue-accent/20' : 'hover:bg-gray-100/50 dark:hover:bg-gray-800/50'}>
         <td className="p-2"><input type="checkbox" checked={isSelected} onChange={(e) => onSelectItem(item.id, e)} className="h-4 w-4 bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-600 rounded text-blue-accent focus:ring-blue-accent"/></td>
         <td className="p-2 font-medium text-sm text-gray-900 dark:text-gray-100">{item.testSnapshot.name}</td>
@@ -821,21 +823,19 @@ const CycleTestRow: React.FC<{
             </select>
         </td>
         <td className="p-1">
-            <input
-                type="text"
-                list="maps-datalist"
-                value={item.map || ''}
-                onChange={e => onUpdateItem(item.id, { map: e.target.value || null })}
-                className="w-full bg-transparent text-sm p-1 rounded-md border border-transparent text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 focus:ring-1 focus:ring-blue-accent focus:border-blue-accent focus:bg-white dark:focus:bg-gray-700"
+            <EditableDatalistInput
+                value={item.map}
+                onChange={value => onUpdateItem(item.id, { map: value })}
+                options={maps}
+                inputClassName="w-full bg-transparent text-sm p-1 rounded-md border border-transparent text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 focus:ring-1 focus:ring-blue-accent focus:border-blue-accent focus:bg-white dark:focus:bg-gray-700"
             />
         </td>
         <td className="p-1">
-            <input
-                type="text"
-                list="configurations-datalist"
-                value={item.configuration || ''}
-                onChange={e => onUpdateItem(item.id, { configuration: e.target.value || null })}
-                className="w-full bg-transparent text-sm p-1 rounded-md border border-transparent text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 focus:ring-1 focus:ring-blue-accent focus:border-blue-accent focus:bg-white dark:focus:bg-gray-700"
+            <EditableDatalistInput
+                value={item.configuration}
+                onChange={value => onUpdateItem(item.id, { configuration: value })}
+                options={configurations}
+                inputClassName="w-full bg-transparent text-sm p-1 rounded-md border border-transparent text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 focus:ring-1 focus:ring-blue-accent focus:border-blue-accent focus:bg-white dark:focus:bg-gray-700"
             />
         </td>
         <td className="p-2">
