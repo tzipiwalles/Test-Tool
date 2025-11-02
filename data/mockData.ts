@@ -1,5 +1,5 @@
 
-import { Folder, Test, Cycle, CycleItem, User, TestStatus, Priority, CycleStatus, CycleItemResult, UUID, TestStep, CycleType, MapInfo, Scope, ScopeName, UserRole } from '../types';
+import { Folder, Test, Cycle, CycleItem, User, TestStatus, Priority, CycleStatus, CycleItemResult, UUID, TestStep, CycleType, CycleMapInfo, Scope, ScopeName, UserRole } from '../types';
 
 // USERS
 export const mockUsers: User[] = [
@@ -146,7 +146,10 @@ export const mockCycles: Cycle[] = [
     version: '24.11.0.1',
     refVersion: '24.10.3.2',
     cycleType: CycleType.REGRESSION,
-    mapsInfo: [{ mapName: 'Detroit', link: 'http://example.com/detroit' }, { mapName: 'Munich', link: 'http://example.com/munich' }]
+    mapsInfo: [
+      { id: 'mi-1', mapName: 'Detroit', mainMapLink: 'http://example.com/detroit' }, 
+      { id: 'mi-2', mapName: 'Munich', mainMapLink: 'http://example.com/munich' }
+    ]
   },
   {
     id: 'c-2',

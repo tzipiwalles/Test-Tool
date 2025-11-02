@@ -61,9 +61,17 @@ export interface Permissions {
   isViewer: boolean;
 }
 
-export interface MapInfo {
+export interface CycleMapInfo {
+  id: UUID;
   mapName: string;
-  link: string;
+  mainMapLink?: string;
+  refMapLink?: string;
+  mainSA?: string;
+  refSA?: string;
+  v2vMapsLink?: string;
+  v2vProbes?: string;
+  gtProbes?: string;
+  comment?: string;
 }
 
 export interface User {
@@ -122,7 +130,7 @@ export interface Cycle {
   version?: string;
   refVersion?: string;
   cycleType?: CycleType;
-  mapsInfo?: MapInfo[];
+  mapsInfo?: CycleMapInfo[];
 }
 
 export interface CycleItem {
