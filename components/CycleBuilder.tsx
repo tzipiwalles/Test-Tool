@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-// Fix: Add UserRole to the import to satisfy the User type.
-import { Cycle, Test, CycleItem, CycleItemResult, User, CycleStatus, Scope, ScopeName, Priority, Folder, Permissions, UserRole, CycleMapInfo, UUID } from '../types';
+import { Cycle, Test, CycleItem, CycleItemResult, User, CycleStatus, Scope, ScopeName, Priority, Folder, Permissions, UserRole, CycleMapInfo, UUID, Note, NoteParentType } from '../types';
 import { useData } from './DataContext';
 import { buildFolderTree } from '../data/mockData';
 import FolderTree from './FolderTree';
@@ -15,8 +14,9 @@ import { ClockIcon } from './icons/ClockIcon';
 import EditableDatalistInput from './EditableDatalistInput';
 import { ExpandAllIcon } from './icons/ExpandAllIcon';
 import { CollapseAllIcon } from './icons/CollapseAllIcon';
-import { FilterIcon } from './icons/FilterIcon';
 import { ChevronRightIcon } from './icons/ChevronRightIcon';
+import { NoteIcon } from './icons/NoteIcon';
+import NotesPanel from './NotesPanel';
 
 const PriorityBadge: React.FC<{ priority: Priority }> = ({ priority }) => {
     const styles = {
@@ -397,13 +397,19 @@ const initialFilters = {
   priority: 'all',
 };
 
+type NoteTarget = {
+    id: UUID;
+    type: NoteParentType;
+    name: string;
+}
+
 // Main Component
 const CycleBuilder: React.FC<{
   cycle: Cycle;
   onBack: () => void;
   onUpdateCycle: (cycle: Cycle) => void;
 }> = ({ cycle, onBack, onUpdateCycle }) => {
-    const { cycleItems, setCycleItems, users, scopes, setScopes, tests, maps, configurations, permissions } = useData();
+    const { cycleItems, setCycleItems, users, scopes, setScopes, tests, maps, configurations, permissions, notes, setNotes, currentUser } = useData();
     const [editingCycle, setEditingCycle] = useState<Cycle>(cycle);
     const [isAddTestModalOpen, setIsAddTestModalOpen] = useState(false);
     const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
@@ -411,7 +417,13 @@ const CycleBuilder: React.FC<{
     const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
     const [lastSelectedItemId, setLastSelectedItemId] = useState<string | null>(null);
     const [filters, setFilters] = useState(initialFilters);
+    const [editingNoteTarget, setEditingNoteTarget] = useState<NoteTarget | null>(null);
 
+    const notesMap = useMemo(() => {
+        const map = new Map<string, Note>();
+        notes.forEach(note => map.set(note.parentId, note));
+        return map;
+    }, [notes]);
 
     const cycleScopes = useMemo(() => scopes.filter(s => s.cycleId === cycle.id), [scopes, cycle.id]);
     const [selectedScopeId, setSelectedScopeId] = useState<string | null>(cycleScopes[0]?.id || null);
@@ -557,6 +569,28 @@ const CycleBuilder: React.FC<{
     const handleRemoveItem = (itemId: string) => {
         setCycleItems(prev => prev.filter(item => item.id !== itemId));
     };
+
+    const handleSaveNote = (noteContent: string) => {
+        if (!editingNoteTarget || !currentUser) return;
+
+        const existingNote = notes.find(n => n.parentId === editingNoteTarget.id);
+        const now = new Date().toISOString();
+
+        if (existingNote) {
+            setNotes(prev => prev.map(n => n.id === existingNote.id ? { ...n, content: noteContent, updatedAt: now, authorId: currentUser.id } : n));
+        } else {
+            const newNote: Note = {
+                id: `n-${Date.now()}`,
+                parentId: editingNoteTarget.id,
+                parentType: editingNoteTarget.type,
+                content: noteContent,
+                authorId: currentUser.id,
+                createdAt: now,
+                updatedAt: now,
+            };
+            setNotes(prev => [...prev, newNote]);
+        }
+    };
     
     const groupedItems = useMemo(() => {
         if (groupBy === 'none') return null;
@@ -673,7 +707,6 @@ const CycleBuilder: React.FC<{
         setLastSelectedItemId(null);
     };
 
-    // Fix: Add the 'role' property to the 'Unassigned' user object to match the User type.
     const allUsers = useMemo(() => [{ id: '', displayName: 'Unassigned', email: '', role: UserRole.VIEWER }, ...users], [users]);
     
     const existingTestCountsInScope = useMemo(() => {
@@ -699,7 +732,7 @@ const CycleBuilder: React.FC<{
 
 
     return (
-        <div className="flex flex-col h-full p-6 overflow-hidden">
+        <div className="flex h-full overflow-hidden">
              {permissions.canEditCycles && isAddTestModalOpen && (
                 <AddTestsModal 
                     onClose={() => setIsAddTestModalOpen(false)} 
@@ -714,310 +747,328 @@ const CycleBuilder: React.FC<{
                     onSave={handleBulkEditSave}
                 />
             )}
-            <header className="flex-shrink-0 mb-4">
-                <div className="flex items-center mb-2">
-                     <button onClick={onBack} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-2">
-                        <ChevronLeftIcon className="w-6 h-6" />
-                    </button>
-                    <h1 className="text-2xl font-bold truncate" title={cycle.name}>{cycle.name}</h1>
-                     <div className="ml-4">
-                        <CycleStatusBadge status={editingCycle.status} />
-                    </div>
-                </div>
-                <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
-                    <span>
-                        Total Tests: {itemsInCurrentScope.length} 
-                        {isFiltered && ` (${filteredItems.length} shown)`}
-                    </span>
-                    <div className="w-1/3">
-                        <CycleProgress items={itemsInCurrentScope} />
-                    </div>
-                </div>
-            </header>
-            
-            <div className="space-y-4 mb-4 flex-shrink-0">
-                <details className="group bg-gray-100 dark:bg-gray-800/50 rounded-lg" open>
-                    <summary className="font-semibold cursor-pointer p-4 list-none flex items-center justify-between">
-                        <div className="flex items-center">
-                            <ChevronRightIcon className="w-5 h-5 mr-2 transition-transform duration-200 group-open:rotate-90" />
-                            <span>Cycle Details</span>
-                        </div>
-                        <span className="text-sm font-normal text-gray-500 dark:text-gray-400 truncate group-open:hidden">
-                            {cycleDetailsSummary}
-                        </span>
-                    </summary>
-                    <div className="p-4 pt-0">
-                        <fieldset disabled={!permissions.canEditCycles} className="disabled:opacity-70">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Description</label>
-                                    <textarea name="description" value={editingCycle.description} onChange={handleDetailsChange} rows={3} className="mt-1 w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 disabled:bg-gray-100 dark:disabled:bg-gray-800"></textarea>
-                                </div>
-                                <div className="space-y-2">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Version</label>
-                                        <input type="text" name="version" value={editingCycle.version || ''} onChange={handleDetailsChange} className="mt-1 w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 disabled:bg-gray-100 dark:disabled:bg-gray-800"/>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Ref Version</label>
-                                        <input type="text" name="refVersion" value={editingCycle.refVersion || ''} onChange={handleDetailsChange} className="mt-1 w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 disabled:bg-gray-100 dark:disabled:bg-gray-800"/>
-                                    </div>
-                                </div>
-                                 <div>
-                                    <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Labels</label>
-                                    <input type="text" value={(editingCycle.labels || []).join(', ')} onChange={handleLabelsChange} className="mt-1 w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 disabled:bg-gray-100 dark:disabled:bg-gray-800"/>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Status</label>
-                                    <select
-                                        name="status"
-                                        value={editingCycle.status}
-                                        onChange={handleDetailsChange}
-                                        className="mt-1 w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 disabled:bg-gray-100 dark:disabled:bg-gray-800"
-                                    >
-                                        {Object.values(CycleStatus).map(s => (
-                                            <option key={s} value={s} className="capitalize">{s.replace(/_/g, ' ')}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
-                        </fieldset>
-                    </div>
-                </details>
+            {editingNoteTarget && (
+                <NotesPanel
+                    target={editingNoteTarget}
+                    onClose={() => setEditingNoteTarget(null)}
+                    onSave={handleSaveNote}
+                />
+            )}
 
-                <details className="group bg-gray-100 dark:bg-gray-800/50 rounded-lg" open>
-                    <summary className="font-semibold cursor-pointer p-4 list-none flex items-center justify-between">
-                         <div className="flex items-center">
-                            <ChevronRightIcon className="w-5 h-5 mr-2 transition-transform duration-200 group-open:rotate-90" />
-                            <span>Maps and Tools</span>
+            <div className="flex flex-col flex-1 p-6 overflow-hidden">
+                <header className="flex-shrink-0 mb-4">
+                    <div className="flex items-center mb-2">
+                        <button onClick={onBack} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-2">
+                            <ChevronLeftIcon className="w-6 h-6" />
+                        </button>
+                        <h1 className="text-2xl font-bold truncate" title={cycle.name}>{cycle.name}</h1>
+                        <div className="ml-4 flex items-center gap-2">
+                            <CycleStatusBadge status={editingCycle.status} />
+                             <button onClick={() => setEditingNoteTarget({ id: cycle.id, type: 'cycle', name: `Notes for cycle: ${cycle.name}`})} title="Cycle Notes" className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                                <NoteIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" filled={notesMap.has(cycle.id)} />
+                            </button>
                         </div>
-                        <span className="text-sm font-normal text-gray-500 dark:text-gray-400 truncate group-open:hidden">
-                            {mapsSummaryString}
+                    </div>
+                    <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
+                        <span>
+                            Total Tests: {itemsInCurrentScope.length} 
+                            {isFiltered && ` (${filteredItems.length} shown)`}
                         </span>
-                    </summary>
-                    <div className="p-4 pt-0">
-                        <fieldset disabled={!permissions.canEditCycles} className="disabled:opacity-70">
-                            <div className="mt-4 overflow-x-auto">
-                                <table className="w-full text-sm text-left border-collapse">
-                                    <thead className="border-b border-gray-300 dark:border-gray-600">
-                                        <tr>
-                                            <th className="p-2 font-semibold min-w-[150px]">Map Name</th>
-                                            <th className="p-2 font-semibold min-w-[150px]">Main map link</th>
-                                            <th className="p-2 font-semibold min-w-[150px]">Ref map link</th>
-                                            <th className="p-2 font-semibold min-w-[150px]">Main SA</th>
-                                            <th className="p-2 font-semibold min-w-[150px]">Ref SA</th>
-                                            <th className="p-2 font-semibold min-w-[150px]">V2V Maps link</th>
-                                            <th className="p-2 font-semibold min-w-[150px]">V2V Probes</th>
-                                            <th className="p-2 font-semibold min-w-[150px]">GT Probes</th>
-                                            <th className="p-2 font-semibold min-w-[200px]">Comment</th>
-                                            <th className="p-2 w-10"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {(editingCycle.mapsInfo || []).map((info) => (
-                                            <tr key={info.id} className="border-b border-gray-200 dark:border-gray-700">
-                                                <td className="p-1 align-top"><EditableDatalistInput value={info.mapName} onChange={(val) => handleMapsInfoChange(info.id, 'mapName', val || '')} options={maps} inputClassName="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800" /></td>
-                                                <td className="p-1 align-top"><input type="text" value={info.mainMapLink || ''} onChange={(e) => handleMapsInfoChange(info.id, 'mainMapLink', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
-                                                <td className="p-1 align-top"><input type="text" value={info.refMapLink || ''} onChange={(e) => handleMapsInfoChange(info.id, 'refMapLink', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
-                                                <td className="p-1 align-top"><input type="text" value={info.mainSA || ''} onChange={(e) => handleMapsInfoChange(info.id, 'mainSA', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
-                                                <td className="p-1 align-top"><input type="text" value={info.refSA || ''} onChange={(e) => handleMapsInfoChange(info.id, 'refSA', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
-                                                <td className="p-1 align-top"><input type="text" value={info.v2vMapsLink || ''} onChange={(e) => handleMapsInfoChange(info.id, 'v2vMapsLink', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
-                                                <td className="p-1 align-top"><input type="text" value={info.v2vProbes || ''} onChange={(e) => handleMapsInfoChange(info.id, 'v2vProbes', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
-                                                <td className="p-1 align-top"><input type="text" value={info.gtProbes || ''} onChange={(e) => handleMapsInfoChange(info.id, 'gtProbes', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
-                                                <td className="p-1 align-top"><input type="text" value={info.comment || ''} onChange={(e) => handleMapsInfoChange(info.id, 'comment', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
-                                                <td className="p-1 align-top"><button onClick={() => removeMapInfo(info.id)} className="text-gray-400 hover:text-red-500 mt-1.5"><TrashIcon className="w-4 h-4"/></button></td>
+                        <div className="w-1/3">
+                            <CycleProgress items={itemsInCurrentScope} />
+                        </div>
+                    </div>
+                </header>
+                
+                <div className="space-y-4 mb-4 flex-shrink-0">
+                    <details className="group bg-gray-100 dark:bg-gray-800/50 rounded-lg" open>
+                        <summary className="font-semibold cursor-pointer p-4 list-none flex items-center justify-between">
+                            <div className="flex items-center">
+                                <ChevronRightIcon className="w-5 h-5 mr-2 transition-transform duration-200 group-open:rotate-90" />
+                                <span>Cycle Details</span>
+                            </div>
+                            <span className="text-sm font-normal text-gray-500 dark:text-gray-400 truncate group-open:hidden">
+                                {cycleDetailsSummary}
+                            </span>
+                        </summary>
+                        <div className="p-4 pt-0">
+                            <fieldset disabled={!permissions.canEditCycles} className="disabled:opacity-70">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Description</label>
+                                        <textarea name="description" value={editingCycle.description} onChange={handleDetailsChange} rows={3} className="mt-1 w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 disabled:bg-gray-100 dark:disabled:bg-gray-800"></textarea>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Version</label>
+                                            <input type="text" name="version" value={editingCycle.version || ''} onChange={handleDetailsChange} className="mt-1 w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 disabled:bg-gray-100 dark:disabled:bg-gray-800"/>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Ref Version</label>
+                                            <input type="text" name="refVersion" value={editingCycle.refVersion || ''} onChange={handleDetailsChange} className="mt-1 w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 disabled:bg-gray-100 dark:disabled:bg-gray-800"/>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Labels</label>
+                                        <input type="text" value={(editingCycle.labels || []).join(', ')} onChange={handleLabelsChange} className="mt-1 w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 disabled:bg-gray-100 dark:disabled:bg-gray-800"/>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Status</label>
+                                        <select
+                                            name="status"
+                                            value={editingCycle.status}
+                                            onChange={handleDetailsChange}
+                                            className="mt-1 w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 disabled:bg-gray-100 dark:disabled:bg-gray-800"
+                                        >
+                                            {Object.values(CycleStatus).map(s => (
+                                                <option key={s} value={s} className="capitalize">{s.replace(/_/g, ' ')}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                            </fieldset>
+                        </div>
+                    </details>
+
+                    <details className="group bg-gray-100 dark:bg-gray-800/50 rounded-lg" open>
+                        <summary className="font-semibold cursor-pointer p-4 list-none flex items-center justify-between">
+                            <div className="flex items-center">
+                                <ChevronRightIcon className="w-5 h-5 mr-2 transition-transform duration-200 group-open:rotate-90" />
+                                <span>Maps and Tools</span>
+                            </div>
+                            <span className="text-sm font-normal text-gray-500 dark:text-gray-400 truncate group-open:hidden">
+                                {mapsSummaryString}
+                            </span>
+                        </summary>
+                        <div className="p-4 pt-0">
+                            <fieldset disabled={!permissions.canEditCycles} className="disabled:opacity-70">
+                                <div className="mt-4 overflow-x-auto">
+                                    <table className="w-full text-sm text-left border-collapse">
+                                        <thead className="border-b border-gray-300 dark:border-gray-600">
+                                            <tr>
+                                                <th className="p-2 font-semibold min-w-[150px]">Map Name</th>
+                                                <th className="p-2 font-semibold min-w-[150px]">Main map link</th>
+                                                <th className="p-2 font-semibold min-w-[150px]">Ref map link</th>
+                                                <th className="p-2 font-semibold min-w-[150px]">Main SA</th>
+                                                <th className="p-2 font-semibold min-w-[150px]">Ref SA</th>
+                                                <th className="p-2 font-semibold min-w-[150px]">V2V Maps link</th>
+                                                <th className="p-2 font-semibold min-w-[150px]">V2V Probes</th>
+                                                <th className="p-2 font-semibold min-w-[150px]">GT Probes</th>
+                                                <th className="p-2 font-semibold min-w-[200px]">Comment</th>
+                                                <th className="p-2 font-semibold w-12">Actions</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                            {permissions.canEditCycles && <button onClick={addMapInfo} className="text-sm text-blue-500 hover:underline mt-3 flex items-center"><PlusIcon className="w-4 h-4 mr-1"/>Add Map</button>}
-                        </fieldset>
-                    </div>
-                </details>
-                 {permissions.canEditCycles && (
-                    <div className="flex justify-end">
-                        <button onClick={handleSaveDetails} className="flex items-center bg-blue-accent text-white px-4 py-1.5 rounded-md hover:bg-blue-600 transition-colors text-sm">
-                            <SaveIcon className="w-4 h-4 mr-2"/>
-                            Save Cycle
-                        </button>
-                    </div>
-                )}
-            </div>
-
-            <div className="border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-                <nav className="-mb-px flex space-x-2 items-center">
-                    {cycleScopes.map(scope => (
-                        <div key={scope.id} onClick={() => setSelectedScopeId(scope.id)} className={`group relative flex items-center cursor-pointer py-3 px-1 border-b-2 ${selectedScopeId === scope.id ? 'border-blue-accent' : 'border-transparent hover:border-gray-300'}`}>
-                           <select
-                                value={scope.name}
-                                onChange={(e) => handleUpdateScope(scope.id, { name: e.target.value as ScopeName })}
-                                onClick={(e) => e.stopPropagation()}
-                                disabled={!permissions.canEditCycles}
-                                className={`bg-transparent font-medium text-sm focus:outline-none appearance-none cursor-pointer ${selectedScopeId === scope.id ? 'text-blue-accent' : 'text-gray-500 group-hover:text-gray-700 dark:group-hover:text-gray-200'} disabled:text-gray-400 dark:disabled:text-gray-500 disabled:cursor-not-allowed`}
-                            >
-                                {Object.values(ScopeName).map(name => <option key={name} value={name}>{name}</option>)}
-                            </select>
-                            {permissions.canEditCycles && cycleScopes.length > 1 && (
-                                <button onClick={(e) => { e.stopPropagation(); handleDeleteScope(scope.id); }} className="ml-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Delete Scope">
-                                    <TrashIcon className="w-3 h-3"/>
-                                </button>
-                            )}
+                                        </thead>
+                                        <tbody>
+                                            {(editingCycle.mapsInfo || []).map((info) => (
+                                                <tr key={info.id} className="border-b border-gray-200 dark:border-gray-700">
+                                                    <td className="p-1 align-top"><EditableDatalistInput value={info.mapName} onChange={(val) => handleMapsInfoChange(info.id, 'mapName', val || '')} options={maps} inputClassName="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800" /></td>
+                                                    <td className="p-1 align-top"><input type="text" value={info.mainMapLink || ''} onChange={(e) => handleMapsInfoChange(info.id, 'mainMapLink', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
+                                                    <td className="p-1 align-top"><input type="text" value={info.refMapLink || ''} onChange={(e) => handleMapsInfoChange(info.id, 'refMapLink', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
+                                                    <td className="p-1 align-top"><input type="text" value={info.mainSA || ''} onChange={(e) => handleMapsInfoChange(info.id, 'mainSA', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
+                                                    <td className="p-1 align-top"><input type="text" value={info.refSA || ''} onChange={(e) => handleMapsInfoChange(info.id, 'refSA', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
+                                                    <td className="p-1 align-top"><input type="text" value={info.v2vMapsLink || ''} onChange={(e) => handleMapsInfoChange(info.id, 'v2vMapsLink', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
+                                                    <td className="p-1 align-top"><input type="text" value={info.v2vProbes || ''} onChange={(e) => handleMapsInfoChange(info.id, 'v2vProbes', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
+                                                    <td className="p-1 align-top"><input type="text" value={info.gtProbes || ''} onChange={(e) => handleMapsInfoChange(info.id, 'gtProbes', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
+                                                    <td className="p-1 align-top"><input type="text" value={info.comment || ''} onChange={(e) => handleMapsInfoChange(info.id, 'comment', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
+                                                    <td className="p-1 align-top">
+                                                        <div className="flex items-center mt-1.5">
+                                                            <button onClick={() => setEditingNoteTarget({ id: info.id, type: 'map', name: `Notes for map: ${info.mapName || 'Untitled'}` })} title="Map Notes" className="text-gray-400 hover:text-blue-500">
+                                                                <NoteIcon className="w-4 h-4" filled={notesMap.has(info.id)}/>
+                                                            </button>
+                                                            <button onClick={() => removeMapInfo(info.id)} className="text-gray-400 hover:text-red-500 ml-2"><TrashIcon className="w-4 h-4"/></button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {permissions.canEditCycles && <button onClick={addMapInfo} className="text-sm text-blue-500 hover:underline mt-3 flex items-center"><PlusIcon className="w-4 h-4 mr-1"/>Add Map</button>}
+                            </fieldset>
                         </div>
-                    ))}
+                    </details>
                     {permissions.canEditCycles && (
-                        <button onClick={handleAddScope} className="flex items-center text-sm text-blue-500 hover:underline py-3 px-1">
-                            <PlusIcon className="w-4 h-4 mr-1" /> Add Scope
-                        </button>
-                    )}
-                </nav>
-            </div>
-            
-            <div className="flex items-center justify-between py-2 flex-shrink-0">
-                 <div className="flex items-center gap-4">
-                    <div className="flex items-center">
-                        <label htmlFor="group-by" className="text-sm font-medium mr-2">Group by:</label>
-                        <select id="group-by" value={groupBy} onChange={e => setGroupBy(e.target.value)} className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm">
-                            <option value="none">None</option>
-                            <option value="result">Result</option>
-                            <option value="assignee">Assignee</option>
-                            <option value="map">Map</option>
-                            <option value="configuration">Configuration</option>
-                            <option value="affectedObjectType">Affected Object</option>
-                        </select>
-                    </div>
-                     {permissions.canRunTests && selectedItemIds.size > 0 && (
-                        <div className="flex items-center gap-1 border border-gray-300 dark:border-gray-600 rounded-md p-0.5">
-                            <button onClick={() => setIsBulkEditModalOpen(true)} className="px-3 py-1 text-sm rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">
-                               Bulk Edit ({selectedItemIds.size})
+                        <div className="flex justify-end">
+                            <button onClick={handleSaveDetails} className="flex items-center bg-blue-accent text-white px-4 py-1.5 rounded-md hover:bg-blue-600 transition-colors text-sm">
+                                <SaveIcon className="w-4 h-4 mr-2"/>
+                                Save Cycle
                             </button>
-                            <div className="h-5 w-px bg-gray-300 dark:bg-gray-600 mx-1"></div>
-                             <button onClick={() => handleBulkStatusChange(CycleItemResult.PASSED)} title="Mark as Passed" className="p-1 rounded-md hover:bg-green-100 dark:hover:bg-green-900/50">
-                                <CheckCircleIcon className="w-5 h-5 text-green-500"/>
-                            </button>
-                            <button onClick={() => handleBulkStatusChange(CycleItemResult.FAILED)} title="Mark as Failed" className="p-1 rounded-md hover:bg-red-100 dark:hover:bg-red-900/50">
-                                <XCircleIcon className="w-5 h-5 text-red-500"/>
-                            </button>
-                            <button onClick={() => handleBulkStatusChange(CycleItemResult.BLOCKED)} title="Mark as Blocked" className="p-1 rounded-md hover:bg-yellow-100 dark:hover:bg-yellow-900/50">
-                                <StopCircleIcon className="w-5 h-5 text-yellow-500"/>
-                            </button>
-                            <button onClick={() => handleBulkStatusChange(CycleItemResult.NOT_RUN)} title="Mark as Not Run" className="p-1 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700">
-                                <ClockIcon className="w-5 h-5 text-gray-500 dark:text-gray-400"/>
-                            </button>
-                         </div>
-                    )}
-                </div>
-                {permissions.canEditCycles && (
-                    <button onClick={() => setIsAddTestModalOpen(true)} className="flex items-center bg-blue-accent text-white px-4 py-1.5 rounded-md hover:bg-blue-600 transition-colors text-sm">
-                        <PlusIcon className="w-4 h-4 mr-2" /> Add Tests from Library
-                    </button>
-                )}
-            </div>
-
-            <div className="p-3 border-y border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 flex-shrink-0">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-x-4 gap-y-2 items-end">
-                    <div className="relative sm:col-span-2 md:col-span-3 lg:col-span-2">
-                        <label htmlFor="filter-name" className="text-xs font-medium text-gray-500 dark:text-gray-400">Test Name</label>
-                        <input type="text" id="filter-name" name="name" value={filters.name} onChange={handleFilterChange} placeholder="Search by name..." className="mt-1 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1 text-sm focus:ring-blue-accent focus:border-blue-accent"/>
-                    </div>
-                    <div>
-                        <label htmlFor="filter-assignee" className="text-xs font-medium text-gray-500 dark:text-gray-400">Assignee</label>
-                        <select id="filter-assignee" name="assigneeId" value={filters.assigneeId} onChange={handleFilterChange} className="mt-1 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm focus:ring-blue-accent focus:border-blue-accent">
-                            <option value="all">All Assignees</option>
-                            <option value="unassigned">Unassigned</option>
-                            {users.map(u => <option key={u.id} value={u.id}>{u.displayName}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label htmlFor="filter-result" className="text-xs font-medium text-gray-500 dark:text-gray-400">Result</label>
-                        <select id="filter-result" name="result" value={filters.result} onChange={handleFilterChange} className="mt-1 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm focus:ring-blue-accent focus:border-blue-accent">
-                            <option value="all">All Results</option>
-                            {Object.values(CycleItemResult).map(r => <option key={r} value={r} className="capitalize">{r.replace(/_/g, ' ')}</option>)}
-                        </select>
-                    </div>
-                     <div>
-                        <label htmlFor="filter-priority" className="text-xs font-medium text-gray-500 dark:text-gray-400">Priority</label>
-                        <select id="filter-priority" name="priority" value={filters.priority} onChange={handleFilterChange} className="mt-1 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm focus:ring-blue-accent focus:border-blue-accent">
-                            <option value="all">All Priorities</option>
-                            {Object.values(Priority).map(p => <option key={p} value={p}>{p}</option>)}
-                        </select>
-                    </div>
-                    {isFiltered && (
-                        <div className="lg:col-start-5">
-                             <button onClick={clearFilters} className="w-full px-3 py-1 text-sm rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">Clear Filters</button>
                         </div>
                     )}
                 </div>
-            </div>
 
-            <div className="flex-1 overflow-y-auto">
-                <table className="w-full text-left">
-                   <thead className="sticky top-0 bg-gray-50 dark:bg-gray-950 z-10">
-                        <tr>
-                            <th className="p-2 w-10">
-                                <input 
-                                    type="checkbox" 
-                                    onChange={handleSelectAllItems} 
-                                    ref={el => {
-                                        if (!el) return;
-                                        const numSelected = selectedItemIds.size;
-                                        const numVisible = filteredItems.length;
-                                        el.checked = numVisible > 0 && numSelected === numVisible;
-                                        el.indeterminate = numSelected > 0 && numSelected < numVisible;
-                                    }}
-                                    className="h-4 w-4 bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-600 rounded text-blue-accent focus:ring-blue-accent"
-                                />
-                            </th>
-                            <th className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400 w-2/5">Test Name</th>
-                            <th className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Assignee</th>
-                            <th className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Map</th>
-                            <th className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Config</th>
-                            <th className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Result</th>
-                            <th className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Actions</th>
-                        </tr>
-                   </thead>
-                    <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                        {groupedItems ? (
-                           groupedItems.map(([groupName, items]) => {
+                <div className="border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+                    <nav className="-mb-px flex space-x-2 items-center">
+                        {cycleScopes.map(scope => (
+                            <div key={scope.id} onClick={() => setSelectedScopeId(scope.id)} className={`group relative flex items-center cursor-pointer py-3 px-1 border-b-2 ${selectedScopeId === scope.id ? 'border-blue-accent' : 'border-transparent hover:border-gray-300'}`}>
+                            <select
+                                    value={scope.name}
+                                    onChange={(e) => handleUpdateScope(scope.id, { name: e.target.value as ScopeName })}
+                                    onClick={(e) => e.stopPropagation()}
+                                    disabled={!permissions.canEditCycles}
+                                    className={`bg-transparent font-medium text-sm focus:outline-none appearance-none cursor-pointer ${selectedScopeId === scope.id ? 'text-blue-accent' : 'text-gray-500 group-hover:text-gray-700 dark:group-hover:text-gray-200'} disabled:text-gray-400 dark:disabled:text-gray-500 disabled:cursor-not-allowed`}
+                                >
+                                    {Object.values(ScopeName).map(name => <option key={name} value={name}>{name}</option>)}
+                                </select>
+                                {permissions.canEditCycles && cycleScopes.length > 1 && (
+                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteScope(scope.id); }} className="ml-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Delete Scope">
+                                        <TrashIcon className="w-3 h-3"/>
+                                    </button>
+                                )}
+                            </div>
+                        ))}
+                        {permissions.canEditCycles && (
+                            <button onClick={handleAddScope} className="flex items-center text-sm text-blue-500 hover:underline py-3 px-1">
+                                <PlusIcon className="w-4 h-4 mr-1" /> Add Scope
+                            </button>
+                        )}
+                    </nav>
+                </div>
+                
+                <div className="flex items-center justify-between py-2 flex-shrink-0">
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center">
+                            <label htmlFor="group-by" className="text-sm font-medium mr-2">Group by:</label>
+                            <select id="group-by" value={groupBy} onChange={e => setGroupBy(e.target.value)} className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm">
+                                <option value="none">None</option>
+                                <option value="result">Result</option>
+                                <option value="assignee">Assignee</option>
+                                <option value="map">Map</option>
+                                <option value="configuration">Configuration</option>
+                                <option value="affectedObjectType">Affected Object</option>
+                            </select>
+                        </div>
+                        {permissions.canRunTests && selectedItemIds.size > 0 && (
+                            <div className="flex items-center gap-1 border border-gray-300 dark:border-gray-600 rounded-md p-0.5">
+                                <button onClick={() => setIsBulkEditModalOpen(true)} className="px-3 py-1 text-sm rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">
+                                Bulk Edit ({selectedItemIds.size})
+                                </button>
+                                <div className="h-5 w-px bg-gray-300 dark:bg-gray-600 mx-1"></div>
+                                <button onClick={() => handleBulkStatusChange(CycleItemResult.PASSED)} title="Mark as Passed" className="p-1 rounded-md hover:bg-green-100 dark:hover:bg-green-900/50">
+                                    <CheckCircleIcon className="w-5 h-5 text-green-500"/>
+                                </button>
+                                <button onClick={() => handleBulkStatusChange(CycleItemResult.FAILED)} title="Mark as Failed" className="p-1 rounded-md hover:bg-red-100 dark:hover:bg-red-900/50">
+                                    <XCircleIcon className="w-5 h-5 text-red-500"/>
+                                </button>
+                                <button onClick={() => handleBulkStatusChange(CycleItemResult.BLOCKED)} title="Mark as Blocked" className="p-1 rounded-md hover:bg-yellow-100 dark:hover:bg-yellow-900/50">
+                                    <StopCircleIcon className="w-5 h-5 text-yellow-500"/>
+                                </button>
+                                <button onClick={() => handleBulkStatusChange(CycleItemResult.NOT_RUN)} title="Mark as Not Run" className="p-1 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700">
+                                    <ClockIcon className="w-5 h-5 text-gray-500 dark:text-gray-400"/>
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                    {permissions.canEditCycles && (
+                        <button onClick={() => setIsAddTestModalOpen(true)} className="flex items-center bg-blue-accent text-white px-4 py-1.5 rounded-md hover:bg-blue-600 transition-colors text-sm">
+                            <PlusIcon className="w-4 h-4 mr-2" /> Add Tests from Library
+                        </button>
+                    )}
+                </div>
+
+                <div className="p-3 border-y border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 flex-shrink-0">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-x-4 gap-y-2 items-end">
+                        <div className="relative sm:col-span-2 md:col-span-3 lg:col-span-2">
+                            <label htmlFor="filter-name" className="text-xs font-medium text-gray-500 dark:text-gray-400">Test Name</label>
+                            <input type="text" id="filter-name" name="name" value={filters.name} onChange={handleFilterChange} placeholder="Search by name..." className="mt-1 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1 text-sm focus:ring-blue-accent focus:border-blue-accent"/>
+                        </div>
+                        <div>
+                            <label htmlFor="filter-assignee" className="text-xs font-medium text-gray-500 dark:text-gray-400">Assignee</label>
+                            <select id="filter-assignee" name="assigneeId" value={filters.assigneeId} onChange={handleFilterChange} className="mt-1 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm focus:ring-blue-accent focus:border-blue-accent">
+                                <option value="all">All Assignees</option>
+                                <option value="unassigned">Unassigned</option>
+                                {users.map(u => <option key={u.id} value={u.id}>{u.displayName}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label htmlFor="filter-result" className="text-xs font-medium text-gray-500 dark:text-gray-400">Result</label>
+                            <select id="filter-result" name="result" value={filters.result} onChange={handleFilterChange} className="mt-1 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm focus:ring-blue-accent focus:border-blue-accent">
+                                <option value="all">All Results</option>
+                                {Object.values(CycleItemResult).map(r => <option key={r} value={r} className="capitalize">{r.replace(/_/g, ' ')}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label htmlFor="filter-priority" className="text-xs font-medium text-gray-500 dark:text-gray-400">Priority</label>
+                            <select id="filter-priority" name="priority" value={filters.priority} onChange={handleFilterChange} className="mt-1 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm focus:ring-blue-accent focus:border-blue-accent">
+                                <option value="all">All Priorities</option>
+                                {Object.values(Priority).map(p => <option key={p} value={p}>{p}</option>)}
+                            </select>
+                        </div>
+                        {isFiltered && (
+                            <div className="lg:col-start-5">
+                                <button onClick={clearFilters} className="w-full px-3 py-1 text-sm rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">Clear Filters</button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto">
+                    <table className="w-full text-left">
+                    <thead className="sticky top-0 bg-gray-50 dark:bg-gray-950 z-10">
+                            <tr>
+                                <th className="p-2 w-10">
+                                    <input 
+                                        type="checkbox" 
+                                        onChange={handleSelectAllItems} 
+                                        ref={el => {
+                                            if (!el) return;
+                                            const numSelected = selectedItemIds.size;
+                                            const numVisible = filteredItems.length;
+                                            el.checked = numVisible > 0 && numSelected === numVisible;
+                                            el.indeterminate = numSelected > 0 && numSelected < numVisible;
+                                        }}
+                                        className="h-4 w-4 bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-600 rounded text-blue-accent focus:ring-blue-accent"
+                                    />
+                                </th>
+                                <th className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400 w-2/5">Test Name</th>
+                                <th className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Assignee</th>
+                                <th className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Map</th>
+                                <th className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Config</th>
+                                <th className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Result</th>
+                                <th className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Actions</th>
+                            </tr>
+                    </thead>
+                        <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                            {groupedItems ? (
+                            groupedItems.map(([groupName, items]) => {
                                 const groupItemIds = items.map(i => i.id);
                                 const allSelectedInGroup = groupItemIds.length > 0 && groupItemIds.every(id => selectedItemIds.has(id));
                                 const someSelectedInGroup = groupItemIds.some(id => selectedItemIds.has(id));
-                               return (
-                                   <React.Fragment key={groupName}>
-                                       <tr className="bg-gray-100 dark:bg-gray-800 sticky top-10 z-[5]">
-                                           <td colSpan={7} className="p-2 font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-200 dark:border-gray-700">
-                                               <div className="flex items-center">
-                                                   <input
-                                                       type="checkbox"
-                                                       ref={el => {
-                                                           if (el) { el.indeterminate = someSelectedInGroup && !allSelectedInGroup; }
-                                                       }}
-                                                       checked={allSelectedInGroup}
-                                                       onChange={() => handleSelectGroup(items)}
-                                                       className="h-4 w-4 bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-600 rounded text-blue-accent focus:ring-blue-accent mr-3"
-                                                   />
-                                                   {groupName} ({items.length})
-                                               </div>
-                                           </td>
-                                       </tr>
-                                       {items.map(item => (
-                                         // Fix: Pass handleUpdateItem and handleRemoveItem instead of undefined variables.
-                                         <CycleTestRow key={item.id} item={item} allUsers={allUsers} maps={maps} configurations={configurations} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} permissions={permissions} />
-                                       ))}
-                                   </React.Fragment>
-                               )
-                           })
-                        ) : (
-                            filteredItems.map(item => (
-                               // Fix: Pass handleUpdateItem and handleRemoveItem instead of undefined variables.
-                               <CycleTestRow key={item.id} item={item} allUsers={allUsers} maps={maps} configurations={configurations} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} permissions={permissions} />
-                            ))
-                        )}
-                         {filteredItems.length === 0 && (
-                            <tr><td colSpan={7} className="text-center p-8 text-gray-500">No tests match the current filters.</td></tr>
-                        )}
-                    </tbody>
-                </table>
+                                return (
+                                    <React.Fragment key={groupName}>
+                                        <tr className="bg-gray-100 dark:bg-gray-800 sticky top-10 z-[5]">
+                                            <td colSpan={7} className="p-2 font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-200 dark:border-gray-700">
+                                                <div className="flex items-center">
+                                                    <input
+                                                        type="checkbox"
+                                                        ref={el => {
+                                                            if (el) { el.indeterminate = someSelectedInGroup && !allSelectedInGroup; }
+                                                        }}
+                                                        checked={allSelectedInGroup}
+                                                        onChange={() => handleSelectGroup(items)}
+                                                        className="h-4 w-4 bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-600 rounded text-blue-accent focus:ring-blue-accent mr-3"
+                                                    />
+                                                    {groupName} ({items.length})
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {items.map(item => (
+                                            <CycleTestRow key={item.id} item={item} allUsers={allUsers} maps={maps} configurations={configurations} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} permissions={permissions} onOpenNote={() => setEditingNoteTarget({id: item.id, type: 'item', name: `Notes for test: ${item.testSnapshot.name}`})} hasNote={notesMap.has(item.id)} />
+                                        ))}
+                                    </React.Fragment>
+                                )
+                            })
+                            ) : (
+                                filteredItems.map(item => (
+                                    <CycleTestRow key={item.id} item={item} allUsers={allUsers} maps={maps} configurations={configurations} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} permissions={permissions} onOpenNote={() => setEditingNoteTarget({id: item.id, type: 'item', name: `Notes for test: ${item.testSnapshot.name}`})} hasNote={notesMap.has(item.id)} />
+                                ))
+                            )}
+                            {filteredItems.length === 0 && (
+                                <tr><td colSpan={7} className="text-center p-8 text-gray-500">No tests match the current filters.</td></tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     );
@@ -1033,7 +1084,9 @@ const CycleTestRow: React.FC<{
     onSelectItem: (id: string, event: React.ChangeEvent<HTMLInputElement>) => void;
     isSelected: boolean;
     permissions: Permissions;
-}> = ({ item, allUsers, maps, configurations, onUpdateItem, onRemoveItem, onSelectItem, isSelected, permissions }) => (
+    onOpenNote: () => void;
+    hasNote: boolean;
+}> = ({ item, allUsers, maps, configurations, onUpdateItem, onRemoveItem, onSelectItem, isSelected, permissions, onOpenNote, hasNote }) => (
     <tr className={isSelected ? 'bg-blue-accent/20' : 'hover:bg-gray-100/50 dark:hover:bg-gray-800/50'}>
         <td className="p-2"><input type="checkbox" checked={isSelected} onChange={(e) => onSelectItem(item.id, e)} className="h-4 w-4 bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-600 rounded text-blue-accent focus:ring-blue-accent"/></td>
         <td className="p-2 font-medium text-sm text-gray-900 dark:text-gray-100">{item.testSnapshot.name}</td>
@@ -1078,11 +1131,16 @@ const CycleTestRow: React.FC<{
             </select>
         </td>
         <td className="p-2">
-            {permissions.canEditCycles ? (
-                <button onClick={() => onRemoveItem(item.id)} title="Remove test from cycle" className="text-gray-400 hover:text-red-500">
-                    <TrashIcon className="w-4 h-4" />
+            <div className="flex items-center space-x-2">
+                <button onClick={onOpenNote} title="Notes for this test" className="text-gray-400 hover:text-blue-500">
+                    <NoteIcon className="w-4 h-4" filled={hasNote} />
                 </button>
-            ) : <div className="w-4 h-4" /> }
+                {permissions.canEditCycles ? (
+                    <button onClick={() => onRemoveItem(item.id)} title="Remove test from cycle" className="text-gray-400 hover:text-red-500">
+                        <TrashIcon className="w-4 h-4" />
+                    </button>
+                ) : <div className="w-4 h-4" /> }
+            </div>
         </td>
     </tr>
 )

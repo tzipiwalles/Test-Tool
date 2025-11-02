@@ -1,6 +1,5 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
-import { Folder, Test, Cycle, CycleItem, User, Scope, UserRole, Permissions } from '../types';
+import { Folder, Test, Cycle, CycleItem, User, Scope, UserRole, Permissions, Note } from '../types';
 import { 
     mockFolders as initialFolders, 
     mockTests as initialTests, 
@@ -9,7 +8,8 @@ import {
     mockUsers as initialUsers,
     mockMaps as initialMaps,
     mockConfigurations as initialConfigurations,
-    mockScopes as initialScopes
+    mockScopes as initialScopes,
+    mockNotes as initialNotes
 } from '../data/mockData';
 
 const getPermissions = (user: User | null): Permissions => {
@@ -19,9 +19,10 @@ const getPermissions = (user: User | null): Permissions => {
   const canCreateCycles = role === UserRole.MAINTAINER || role === UserRole.VALIDATION_LEAD;
   const canEditCycles = role === UserRole.MAINTAINER || role === UserRole.VALIDATION_LEAD;
   const canRunTests = role === UserRole.MAINTAINER || role === UserRole.VALIDATION_LEAD || role === UserRole.ANALYST;
+  const canAddNotes = role === UserRole.MAINTAINER || role === UserRole.VALIDATION_LEAD || role === UserRole.ANALYST;
   const isViewer = role === UserRole.VIEWER;
 
-  return { canEditLibrary, canCreateCycles, canEditCycles, canRunTests, isViewer };
+  return { canEditLibrary, canCreateCycles, canEditCycles, canRunTests, canAddNotes, isViewer };
 };
 
 interface DataContextType {
@@ -31,6 +32,7 @@ interface DataContextType {
   scopes: Scope[];
   cycleItems: CycleItem[];
   users: User[];
+  notes: Note[];
   maps: string[];
   configurations: string[];
   setFolders: React.Dispatch<React.SetStateAction<Omit<Folder, 'children' | 'tests'>[]>>;
@@ -39,6 +41,7 @@ interface DataContextType {
   setScopes: React.Dispatch<React.SetStateAction<Scope[]>>;
   setCycleItems: React.Dispatch<React.SetStateAction<CycleItem[]>>;
   setUsers: React.Dispatch<React.SetStateAction<User[]>>;
+  setNotes: React.Dispatch<React.SetStateAction<Note[]>>;
   setMaps: React.Dispatch<React.SetStateAction<string[]>>;
   setConfigurations: React.Dispatch<React.SetStateAction<string[]>>;
   isLoading: boolean;
@@ -67,6 +70,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [cycles, setCycles] = useState<Cycle[]>(() => getItem('cycles', initialCycles));
   const [scopes, setScopes] = useState<Scope[]>(() => getItem('scopes', initialScopes));
   const [cycleItems, setCycleItems] = useState<CycleItem[]>(() => getItem('cycleItems', initialCycleItems));
+  const [notes, setNotes] = useState<Note[]>(() => getItem('notes', initialNotes));
   
   const [users, setUsers] = useState<User[]>(() => getItem('users', initialUsers));
   const [maps, setMaps] = useState<string[]>(() => getItem('maps', initialMaps));
@@ -128,6 +132,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [cycleItems]);
 
   useEffect(() => {
+    localStorage.setItem('notes', JSON.stringify(notes));
+  }, [notes]);
+
+  useEffect(() => {
       localStorage.setItem('users', JSON.stringify(users));
   }, [users]);
 
@@ -154,6 +162,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     scopes,
     cycleItems,
     users,
+    notes,
     maps,
     configurations,
     setFolders,
@@ -162,6 +171,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setScopes,
     setCycleItems,
     setUsers,
+    setNotes,
     setMaps,
     setConfigurations,
     isLoading,

@@ -1,4 +1,3 @@
-
 export type UUID = string;
 
 export enum TestStatus {
@@ -58,6 +57,7 @@ export interface Permissions {
   canCreateCycles: boolean;
   canEditCycles: boolean;
   canRunTests: boolean;
+  canAddNotes: boolean;
   isViewer: boolean;
 }
 
@@ -150,4 +150,16 @@ export interface CycleItem {
   updatedAt: string;
   map: string | null;
   configuration: string | null;
+}
+
+export type NoteParentType = 'cycle' | 'map' | 'item';
+
+export interface Note {
+  id: UUID;
+  content: string; // HTML content from the rich text editor
+  authorId: UUID;
+  createdAt: string; // ISO string date
+  updatedAt: string; // ISO string date
+  parentId: UUID; // ID of the Cycle, CycleMapInfo, or CycleItem it's attached to
+  parentType: NoteParentType;
 }

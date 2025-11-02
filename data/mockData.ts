@@ -1,5 +1,4 @@
-
-import { Folder, Test, Cycle, CycleItem, User, TestStatus, Priority, CycleStatus, CycleItemResult, UUID, TestStep, CycleType, CycleMapInfo, Scope, ScopeName, UserRole } from '../types';
+import { Folder, Test, Cycle, CycleItem, User, TestStatus, Priority, CycleStatus, CycleItemResult, UUID, TestStep, CycleType, CycleMapInfo, Scope, ScopeName, UserRole, Note } from '../types';
 
 // USERS
 export const mockUsers: User[] = [
@@ -275,6 +274,38 @@ export const mockCycleItems: CycleItem[] = [
         configuration: 'Standard'
     },
 ];
+
+// NOTES
+export const mockNotes: Note[] = [
+    {
+        id: 'n-1',
+        parentId: 'c-1',
+        parentType: 'cycle',
+        authorId: 'u-2',
+        createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+        updatedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+        content: '<h3>Overall Cycle Status</h3><p>We are seeing some regressions in the <b>Munich</b> map, specifically related to TFLR. Please prioritize investigation.</p>'
+    },
+    {
+        id: 'n-2',
+        parentId: 'ci-3',
+        parentType: 'item',
+        authorId: 'u-4',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        content: '<p>Test failed due to a new probe signature. See attached snapshot for details. Not a true failure, but requires baseline update.</p>'
+    },
+    {
+        id: 'n-3',
+        parentId: 'mi-1', // Corresponds to the Detroit map in cycle c-1
+        parentType: 'map',
+        authorId: 'u-3',
+        createdAt: new Date(Date.now() - 86400000).toISOString(),
+        updatedAt: new Date(Date.now() - 86400000).toISOString(),
+        content: '<p>Detroit V2V runs are complete. SA review is pending.</p><ul><li>V2V Link: [link]</li><li>SA Link: [link]</li></ul>'
+    },
+];
+
 
 // MAPS & CONFIGURATIONS
 export const mockMaps: string[] = ['Detroit', 'IL_HW', 'JLM', 'Manhattan', 'Munich', 'Paris', 'TLV', 'Tokyo', 'Metropolis', 'Gotham'];
