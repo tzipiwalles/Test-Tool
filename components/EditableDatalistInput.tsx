@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { ChevronDownIcon } from './icons/ChevronDownIcon';
 
 interface EditableDatalistInputProps {
   value: string | null;
@@ -20,25 +21,59 @@ const EditableDatalistInput: React.FC<EditableDatalistInputProps> = ({
   const [inputValue, setInputValue] = useState(value || '');
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const [listStyle, setListStyle] = useState<React.CSSProperties>({});
 
   useEffect(() => {
       setInputValue(value || '');
   }, [value]);
 
-  const handleFocus = () => {
-    setIsOpen(true);
-  };
-  
-  const handleBlur = (e: React.FocusEvent<HTMLDivElement>) => {
-    // Check if the new focused element is outside the component
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-        setIsOpen(false);
-        // Persist the potentially new value from input
-        if (inputValue !== value) {
-            onChange(inputValue || null);
-        }
+  const updateListPosition = useCallback(() => {
+    if (inputRef.current) {
+        const rect = inputRef.current.getBoundingClientRect();
+        setListStyle({
+            position: 'fixed',
+            top: `${rect.bottom}px`,
+            left: `${rect.left}px`,
+            width: `${rect.width}px`,
+            zIndex: 1000, // High z-index to appear on top of other UI
+        });
     }
-  };
+  }, []);
+
+  useEffect(() => {
+      if (isOpen) {
+          updateListPosition();
+          window.addEventListener('resize', updateListPosition);
+          window.addEventListener('scroll', updateListPosition, true);
+      }
+      return () => {
+          window.removeEventListener('resize', updateListPosition);
+          window.removeEventListener('scroll', updateListPosition, true);
+      };
+  }, [isOpen, updateListPosition]);
+  
+  useEffect(() => {
+      const handleClickOutside = (event: MouseEvent) => {
+          if (
+              isOpen &&
+              containerRef.current && !containerRef.current.contains(event.target as Node) &&
+              listRef.current && !listRef.current.contains(event.target as Node)
+          ) {
+              setIsOpen(false);
+              if (inputValue !== value) {
+                  onChange(inputValue || null);
+              }
+          }
+      };
+
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+          document.removeEventListener('mousedown', handleClickOutside);
+      };
+  }, [isOpen, inputValue, value, onChange]);
+
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);
@@ -50,28 +85,46 @@ const EditableDatalistInput: React.FC<EditableDatalistInputProps> = ({
     onChange(option);
     setIsOpen(false);
   };
+  
+  const toggleDropdown = () => {
+    if (isOpen && inputValue !== value) {
+        onChange(inputValue || null);
+    }
+    setIsOpen(prev => !prev);
+  };
 
   const filteredOptions = options.filter(option => 
     option.toLowerCase().includes(inputValue.toLowerCase())
   );
 
   return (
-    <div className={`relative ${className || ''}`} ref={containerRef} onBlur={handleBlur}>
-      <input
-        type="text"
-        value={inputValue}
-        onChange={handleInputChange}
-        onFocus={handleFocus}
-        placeholder={placeholder}
-        className={inputClassName}
-        autoComplete="off"
-      />
+    <div className={`relative ${className || ''}`} ref={containerRef}>
+      <div className="relative">
+        <input
+          ref={inputRef}
+          type="text"
+          value={inputValue}
+          onChange={handleInputChange}
+          onFocus={() => setIsOpen(true)}
+          placeholder={placeholder}
+          className={`${inputClassName} pr-8`}
+          autoComplete="off"
+        />
+        <button 
+            type="button" 
+            onClick={toggleDropdown} 
+            className="absolute inset-y-0 right-0 flex items-center px-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+            tabIndex={-1}
+        >
+            <ChevronDownIcon className={`w-5 h-5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
+
       {isOpen && (
-        <ul className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-48 overflow-y-auto">
+        <ul ref={listRef} style={listStyle} className="mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-48 overflow-y-auto">
           {filteredOptions.map(option => (
             <li
               key={option}
-              // Use onMouseDown to handle click before blur event fires
               onMouseDown={() => handleOptionClick(option)}
               className="px-3 py-1.5 text-sm cursor-pointer hover:bg-blue-accent hover:text-white text-gray-800 dark:text-gray-200"
             >

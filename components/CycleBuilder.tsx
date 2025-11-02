@@ -17,6 +17,9 @@ import { CollapseAllIcon } from './icons/CollapseAllIcon';
 import { ChevronRightIcon } from './icons/ChevronRightIcon';
 import { NoteIcon } from './icons/NoteIcon';
 import NotesPanel from './NotesPanel';
+import NoteReviewView from './NoteReviewView';
+import { ReviewIcon } from './icons/ReviewIcon';
+import { BuilderIcon } from './icons/BuilderIcon';
 
 const PriorityBadge: React.FC<{ priority: Priority }> = ({ priority }) => {
     const styles = {
@@ -357,6 +360,68 @@ const BulkCycleItemEditModal: React.FC<{
   );
 };
 
+const ManageListModal: React.FC<{
+  title: string;
+  items: string[];
+  onClose: () => void;
+  onSave: (newItems: string[]) => void;
+}> = ({ title, items, onClose, onSave }) => {
+  const [currentItems, setCurrentItems] = useState([...items].sort((a, b) => a.localeCompare(b)));
+  const [newItem, setNewItem] = useState('');
+
+  const handleAddItem = () => {
+    if (newItem.trim() && !currentItems.find(i => i.toLowerCase() === newItem.trim().toLowerCase())) {
+      setCurrentItems(prev => [...prev, newItem.trim()].sort((a, b) => a.localeCompare(b)));
+      setNewItem('');
+    }
+  };
+  
+  const handleRemoveItem = (itemToRemove: string) => {
+    setCurrentItems(prev => prev.filter(item => item !== itemToRemove));
+  };
+  
+  const handleSave = () => {
+    onSave(currentItems);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onMouseDown={onClose}>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md text-gray-900 dark:text-white" onMouseDown={e => e.stopPropagation()}>
+        <h2 className="text-xl font-bold mb-4">{title}</h2>
+        
+        <div className="flex space-x-2 mb-4">
+            <input 
+                type="text" 
+                value={newItem}
+                onChange={e => setNewItem(e.target.value)}
+                placeholder="Add new item..."
+                className="flex-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2"
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddItem(); } }}
+            />
+            <button onClick={handleAddItem} className="px-4 py-2 rounded-md bg-blue-accent hover:bg-blue-600 text-white">Add</button>
+        </div>
+
+        <div className="max-h-80 overflow-y-auto space-y-2 pr-2">
+            {currentItems.map(item => (
+                <div key={item} className="flex items-center justify-between p-2 bg-gray-100/50 dark:bg-gray-900/50 rounded-md">
+                    <span className="truncate">{item}</span>
+                    <button onClick={() => handleRemoveItem(item)} className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 ml-4">
+                        <TrashIcon className="w-4 h-4" />
+                    </button>
+                </div>
+            ))}
+        </div>
+
+        <div className="flex justify-end space-x-2 pt-6">
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-md bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100">Cancel</button>
+          <button type="button" onClick={handleSave} className="px-4 py-2 rounded-md bg-blue-accent hover:bg-blue-600 text-white">Save Changes</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 
 const CycleProgress: React.FC<{ items: CycleItem[] }> = ({ items }) => {
     const total = items.length;
@@ -409,15 +474,17 @@ const CycleBuilder: React.FC<{
   onBack: () => void;
   onUpdateCycle: (cycle: Cycle) => void;
 }> = ({ cycle, onBack, onUpdateCycle }) => {
-    const { cycleItems, setCycleItems, users, scopes, setScopes, tests, maps, configurations, permissions, notes, setNotes, currentUser } = useData();
+    const { cycleItems, setCycleItems, users, scopes, setScopes, tests, maps, setMaps, configurations, permissions, notes, setNotes, currentUser } = useData();
     const [editingCycle, setEditingCycle] = useState<Cycle>(cycle);
     const [isAddTestModalOpen, setIsAddTestModalOpen] = useState(false);
     const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
+    const [isManageMapsModalOpen, setIsManageMapsModalOpen] = useState(false);
     const [groupBy, setGroupBy] = useState('none');
     const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
     const [lastSelectedItemId, setLastSelectedItemId] = useState<string | null>(null);
     const [filters, setFilters] = useState(initialFilters);
     const [editingNoteTarget, setEditingNoteTarget] = useState<NoteTarget | null>(null);
+    const [viewMode, setViewMode] = useState<'builder' | 'review'>('builder');
 
     const notesMap = useMemo(() => {
         const map = new Map<string, Note>();
@@ -481,6 +548,10 @@ const CycleBuilder: React.FC<{
             info.id === id ? { ...info, [field]: value } : info
         );
         setEditingCycle(prev => ({ ...prev, mapsInfo: newMapsInfo }));
+
+        if (field === 'mapName' && value && !maps.some(map => map.toLowerCase() === value.toLowerCase())) {
+            setMaps(prevMaps => [...prevMaps, value].sort((a, b) => a.localeCompare(b)));
+        }
     };
 
     const addMapInfo = () => {
@@ -731,6 +802,10 @@ const CycleBuilder: React.FC<{
     const mapsSummaryString = `(${mapCount}) ${mapsSummaryText}`;
 
 
+    if (viewMode === 'review') {
+        return <NoteReviewView cycle={cycle} onBack={() => setViewMode('builder')} />;
+    }
+
     return (
         <div className="flex h-full overflow-hidden">
              {permissions.canEditCycles && isAddTestModalOpen && (
@@ -747,6 +822,28 @@ const CycleBuilder: React.FC<{
                     onSave={handleBulkEditSave}
                 />
             )}
+            {permissions.canEditCycles && isManageMapsModalOpen && (
+                <ManageListModal
+                    title="Manage Maps"
+                    items={maps}
+                    onClose={() => setIsManageMapsModalOpen(false)}
+                    onSave={(newMaps) => {
+                        const deletedMapNames = new Set(maps.filter(oldMap => !newMaps.includes(oldMap)));
+                        
+                        if (deletedMapNames.size > 0 && editingCycle.mapsInfo) {
+                            const updatedMapsInfo = editingCycle.mapsInfo.map(info => 
+                                deletedMapNames.has(info.mapName) 
+                                    ? { ...info, mapName: '' } 
+                                    : info
+                            );
+                            setEditingCycle(prev => ({ ...prev, mapsInfo: updatedMapsInfo }));
+                        }
+                        
+                        setMaps(newMaps);
+                        setIsManageMapsModalOpen(false);
+                    }}
+                />
+            )}
             {editingNoteTarget && (
                 <NotesPanel
                     target={editingNoteTarget}
@@ -757,16 +854,24 @@ const CycleBuilder: React.FC<{
 
             <div className="flex flex-col flex-1 p-6 overflow-hidden">
                 <header className="flex-shrink-0 mb-4">
-                    <div className="flex items-center mb-2">
-                        <button onClick={onBack} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-2">
-                            <ChevronLeftIcon className="w-6 h-6" />
-                        </button>
-                        <h1 className="text-2xl font-bold truncate" title={cycle.name}>{cycle.name}</h1>
-                        <div className="ml-4 flex items-center gap-2">
-                            <CycleStatusBadge status={editingCycle.status} />
-                             <button onClick={() => setEditingNoteTarget({ id: cycle.id, type: 'cycle', name: `Notes for cycle: ${cycle.name}`})} title="Cycle Notes" className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
-                                <NoteIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" filled={notesMap.has(cycle.id)} />
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center mb-2">
+                            <button onClick={onBack} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-2">
+                                <ChevronLeftIcon className="w-6 h-6" />
                             </button>
+                            <h1 className="text-2xl font-bold truncate" title={cycle.name}>{cycle.name}</h1>
+                            <div className="ml-4 flex items-center gap-2">
+                                <CycleStatusBadge status={editingCycle.status} />
+                                <button onClick={() => setEditingNoteTarget({ id: cycle.id, type: 'cycle', name: `Notes for cycle: ${cycle.name}`})} title="Cycle Notes" className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                                    <NoteIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" filled={notesMap.has(cycle.id)} />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                           <button onClick={() => setViewMode('review')} className="flex items-center text-sm px-3 py-1.5 rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">
+                             <ReviewIcon className="w-4 h-4 mr-2" />
+                             Note Review
+                           </button>
                         </div>
                     </div>
                     <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
@@ -781,7 +886,7 @@ const CycleBuilder: React.FC<{
                 </header>
                 
                 <div className="space-y-4 mb-4 flex-shrink-0">
-                    <details className="group bg-gray-100 dark:bg-gray-800/50 rounded-lg" open>
+                    <details className="group bg-gray-100 dark:bg-gray-800/50 rounded-lg">
                         <summary className="font-semibold cursor-pointer p-4 list-none flex items-center justify-between">
                             <div className="flex items-center">
                                 <ChevronRightIcon className="w-5 h-5 mr-2 transition-transform duration-200 group-open:rotate-90" />
@@ -830,11 +935,22 @@ const CycleBuilder: React.FC<{
                         </div>
                     </details>
 
-                    <details className="group bg-gray-100 dark:bg-gray-800/50 rounded-lg" open>
+                    <details className="group bg-gray-100 dark:bg-gray-800/50 rounded-lg">
                         <summary className="font-semibold cursor-pointer p-4 list-none flex items-center justify-between">
                             <div className="flex items-center">
                                 <ChevronRightIcon className="w-5 h-5 mr-2 transition-transform duration-200 group-open:rotate-90" />
                                 <span>Maps and Tools</span>
+                                {permissions.canEditCycles && (
+                                    <button 
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            setIsManageMapsModalOpen(true);
+                                        }}
+                                        className="ml-4 text-xs px-2 py-0.5 rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
+                                    >
+                                        Manage
+                                    </button>
+                                )}
                             </div>
                             <span className="text-sm font-normal text-gray-500 dark:text-gray-400 truncate group-open:hidden">
                                 {mapsSummaryString}
@@ -846,6 +962,7 @@ const CycleBuilder: React.FC<{
                                     <table className="w-full text-sm text-left border-collapse">
                                         <thead className="border-b border-gray-300 dark:border-gray-600">
                                             <tr>
+                                                <th className="p-2 font-semibold w-20">Actions</th>
                                                 <th className="p-2 font-semibold min-w-[150px]">Map Name</th>
                                                 <th className="p-2 font-semibold min-w-[150px]">Main map link</th>
                                                 <th className="p-2 font-semibold min-w-[150px]">Ref map link</th>
@@ -855,12 +972,19 @@ const CycleBuilder: React.FC<{
                                                 <th className="p-2 font-semibold min-w-[150px]">V2V Probes</th>
                                                 <th className="p-2 font-semibold min-w-[150px]">GT Probes</th>
                                                 <th className="p-2 font-semibold min-w-[200px]">Comment</th>
-                                                <th className="p-2 font-semibold w-12">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {(editingCycle.mapsInfo || []).map((info) => (
                                                 <tr key={info.id} className="border-b border-gray-200 dark:border-gray-700">
+                                                    <td className="p-1 align-top">
+                                                        <div className="flex items-center justify-center mt-1.5 space-x-2">
+                                                            <button onClick={() => setEditingNoteTarget({ id: info.id, type: 'map', name: `Notes for map: ${info.mapName || 'Untitled'}` })} title="Map Notes" className="text-gray-400 hover:text-blue-500">
+                                                                <NoteIcon className="w-4 h-4" filled={notesMap.has(info.id)}/>
+                                                            </button>
+                                                            <button onClick={() => removeMapInfo(info.id)} title="Remove Map" className="text-gray-400 hover:text-red-500"><TrashIcon className="w-4 h-4"/></button>
+                                                        </div>
+                                                    </td>
                                                     <td className="p-1 align-top"><EditableDatalistInput value={info.mapName} onChange={(val) => handleMapsInfoChange(info.id, 'mapName', val || '')} options={maps} inputClassName="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800" /></td>
                                                     <td className="p-1 align-top"><input type="text" value={info.mainMapLink || ''} onChange={(e) => handleMapsInfoChange(info.id, 'mainMapLink', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
                                                     <td className="p-1 align-top"><input type="text" value={info.refMapLink || ''} onChange={(e) => handleMapsInfoChange(info.id, 'refMapLink', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
@@ -870,14 +994,6 @@ const CycleBuilder: React.FC<{
                                                     <td className="p-1 align-top"><input type="text" value={info.v2vProbes || ''} onChange={(e) => handleMapsInfoChange(info.id, 'v2vProbes', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
                                                     <td className="p-1 align-top"><input type="text" value={info.gtProbes || ''} onChange={(e) => handleMapsInfoChange(info.id, 'gtProbes', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
                                                     <td className="p-1 align-top"><input type="text" value={info.comment || ''} onChange={(e) => handleMapsInfoChange(info.id, 'comment', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
-                                                    <td className="p-1 align-top">
-                                                        <div className="flex items-center mt-1.5">
-                                                            <button onClick={() => setEditingNoteTarget({ id: info.id, type: 'map', name: `Notes for map: ${info.mapName || 'Untitled'}` })} title="Map Notes" className="text-gray-400 hover:text-blue-500">
-                                                                <NoteIcon className="w-4 h-4" filled={notesMap.has(info.id)}/>
-                                                            </button>
-                                                            <button onClick={() => removeMapInfo(info.id)} className="text-gray-400 hover:text-red-500 ml-2"><TrashIcon className="w-4 h-4"/></button>
-                                                        </div>
-                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>

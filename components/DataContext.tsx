@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useCallback } from 'react';
 import { Folder, Test, Cycle, CycleItem, User, Scope, UserRole, Permissions, Note } from '../types';
 import { 
     mockFolders as initialFolders, 
@@ -11,6 +11,9 @@ import {
     mockScopes as initialScopes,
     mockNotes as initialNotes
 } from '../data/mockData';
+
+// This channel will be used to sync state across different browser tabs.
+const channel = new BroadcastChannel('catalyst-data-sync');
 
 const getPermissions = (user: User | null): Permissions => {
   const role = user?.role;
@@ -54,32 +57,21 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | null>(null);
 
-const getItem = <T,>(key: string, initialValue: T): T => {
-    try {
-        const item = localStorage.getItem(key);
-        return item ? JSON.parse(item) : initialValue;
-    } catch (error) {
-        console.error(`Error reading localStorage key “${key}”:`, error);
-        return initialValue;
-    }
-};
-
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [folders, setFolders] = useState<Omit<Folder, 'children' | 'tests'>[]>(() => getItem('folders', initialFolders));
-  const [tests, setTests] = useState<Test[]>(() => getItem('tests', initialTests));
-  const [cycles, setCycles] = useState<Cycle[]>(() => getItem('cycles', initialCycles));
-  const [scopes, setScopes] = useState<Scope[]>(() => getItem('scopes', initialScopes));
-  const [cycleItems, setCycleItems] = useState<CycleItem[]>(() => getItem('cycleItems', initialCycleItems));
-  const [notes, setNotes] = useState<Note[]>(() => getItem('notes', initialNotes));
+  const [folders, setFolders] = useState<Omit<Folder, 'children' | 'tests'>[]>(initialFolders);
+  const [tests, setTests] = useState<Test[]>(initialTests);
+  const [cycles, setCycles] = useState<Cycle[]>(initialCycles);
+  const [scopes, setScopes] = useState<Scope[]>(initialScopes);
+  const [cycleItems, setCycleItems] = useState<CycleItem[]>(initialCycleItems);
+  const [notes, setNotes] = useState<Note[]>(initialNotes);
   
-  const [users, setUsers] = useState<User[]>(() => getItem('users', initialUsers));
-  const [maps, setMaps] = useState<string[]>(() => getItem('maps', initialMaps));
-  const [configurations, setConfigurations] = useState<string[]>(() => getItem('configurations', initialConfigurations));
+  const [users, setUsers] = useState<User[]>(initialUsers);
+  const [maps, setMaps] = useState<string[]>(initialMaps);
+  const [configurations, setConfigurations] = useState<string[]>(initialConfigurations);
 
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const savedUser = getItem<User | null>('currentUser', null);
     // Default to Tzipi (maintainer) if no user is saved or found
-    return savedUser || initialUsers.find(u => u.role === UserRole.MAINTAINER) || initialUsers[0];
+    return initialUsers.find(u => u.role === UserRole.MAINTAINER) || initialUsers[0];
   });
 
   const permissions = useMemo(() => getPermissions(currentUser), [currentUser]);
@@ -96,6 +88,63 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
     return 'dark';
   });
+  
+  // This effect listens for messages from other tabs and updates the state accordingly.
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      const { type, payload } = event.data;
+      // Received a message from another tab. Update state without broadcasting again.
+      switch (type) {
+        case 'SET_FOLDERS': setFolders(payload); break;
+        case 'SET_TESTS': setTests(payload); break;
+        case 'SET_CYCLES': setCycles(payload); break;
+        case 'SET_SCOPES': setScopes(payload); break;
+        case 'SET_CYCLE_ITEMS': setCycleItems(payload); break;
+        case 'SET_NOTES': setNotes(payload); break;
+        case 'SET_MAPS': setMaps(payload); break;
+        case 'SET_CONFIGURATIONS': setConfigurations(payload); break;
+        default: break;
+      }
+    };
+
+    channel.addEventListener('message', handleMessage);
+
+    // Cleanup function to remove the listener when the component unmounts.
+    return () => {
+      channel.removeEventListener('message', handleMessage);
+    };
+  }, []); // Empty dependency array ensures this runs only once.
+
+  // Helper function to create a state setter that also broadcasts the change.
+  const createBroadcastingSetter = <T,>(
+    setter: React.Dispatch<React.SetStateAction<T>>,
+    messageType: string,
+    currentState: T
+  ): React.Dispatch<React.SetStateAction<T>> => {
+    return useCallback((updater) => {
+      // The updater can be a new value or a function like in useState.
+      // We calculate the new state first.
+      const newState = typeof updater === 'function' 
+        ? (updater as (prevState: T) => T)(currentState) 
+        : updater;
+      
+      // Update the local state.
+      setter(newState);
+      
+      // Broadcast the new state to other tabs.
+      channel.postMessage({ type: messageType, payload: newState });
+    }, [setter, messageType, currentState]);
+  };
+
+  const broadcastSetFolders = createBroadcastingSetter(setFolders, 'SET_FOLDERS', folders);
+  const broadcastSetTests = createBroadcastingSetter(setTests, 'SET_TESTS', tests);
+  const broadcastSetCycles = createBroadcastingSetter(setCycles, 'SET_CYCLES', cycles);
+  const broadcastSetScopes = createBroadcastingSetter(setScopes, 'SET_SCOPES', scopes);
+  const broadcastSetCycleItems = createBroadcastingSetter(setCycleItems, 'SET_CYCLE_ITEMS', cycleItems);
+  const broadcastSetNotes = createBroadcastingSetter(setNotes, 'SET_NOTES', notes);
+  const broadcastSetMaps = createBroadcastingSetter(setMaps, 'SET_MAPS', maps);
+  const broadcastSetConfigurations = createBroadcastingSetter(setConfigurations, 'SET_CONFIGURATIONS', configurations);
+
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -111,50 +160,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
   };
 
-  useEffect(() => {
-      localStorage.setItem('folders', JSON.stringify(folders));
-  }, [folders]);
-
-  useEffect(() => {
-      localStorage.setItem('tests', JSON.stringify(tests));
-  }, [tests]);
-  
-  useEffect(() => {
-      localStorage.setItem('cycles', JSON.stringify(cycles));
-  }, [cycles]);
-
-  useEffect(() => {
-      localStorage.setItem('scopes', JSON.stringify(scopes));
-  }, [scopes]);
-
-  useEffect(() => {
-      localStorage.setItem('cycleItems', JSON.stringify(cycleItems));
-  }, [cycleItems]);
-
-  useEffect(() => {
-    localStorage.setItem('notes', JSON.stringify(notes));
-  }, [notes]);
-
-  useEffect(() => {
-      localStorage.setItem('users', JSON.stringify(users));
-  }, [users]);
-
-   useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem('currentUser', JSON.stringify(currentUser));
-    } else {
-      localStorage.removeItem('currentUser');
-    }
-  }, [currentUser]);
-  
-  useEffect(() => {
-      localStorage.setItem('maps', JSON.stringify(maps));
-  }, [maps]);
-  
-  useEffect(() => {
-      localStorage.setItem('configurations', JSON.stringify(configurations));
-  }, [configurations]);
-
   const value = {
     folders,
     tests,
@@ -165,15 +170,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     notes,
     maps,
     configurations,
-    setFolders,
-    setTests,
-    setCycles,
-    setScopes,
-    setCycleItems,
+    setFolders: broadcastSetFolders,
+    setTests: broadcastSetTests,
+    setCycles: broadcastSetCycles,
+    setScopes: broadcastSetScopes,
+    setCycleItems: broadcastSetCycleItems,
+    setNotes: broadcastSetNotes,
+    setMaps: broadcastSetMaps,
+    setConfigurations: broadcastSetConfigurations,
+    // setUsers is for session-specific data and should not be broadcasted.
     setUsers,
-    setNotes,
-    setMaps,
-    setConfigurations,
     isLoading,
     theme,
     toggleTheme,
