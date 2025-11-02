@@ -1,3 +1,5 @@
+
+// Fix: Removed self-import of UUID which was causing a conflict.
 export type UUID = string;
 
 export enum TestStatus {
@@ -20,6 +22,8 @@ export enum CycleStatus {
 
 export enum CycleItemResult {
   NOT_RUN = 'not_run',
+  EXECUTING = 'executing',
+  PENDING_REVIEW = 'pending_review',
   PASSED = 'passed',
   FAILED = 'failed',
   BLOCKED = 'blocked',
@@ -149,10 +153,10 @@ export interface CycleItem {
   result: CycleItemResult;
   updatedAt: string;
   map: string | null;
-  configuration: string | null;
+  configurations: string[];
 }
 
-export type NoteParentType = 'cycle' | 'map' | 'item';
+export type NoteParentType = 'cycle' | 'map' | 'item' | 'objectType';
 
 export interface Note {
   id: UUID;
@@ -160,6 +164,7 @@ export interface Note {
   authorId: UUID;
   createdAt: string; // ISO string date
   updatedAt: string; // ISO string date
-  parentId: UUID; // ID of the Cycle, CycleMapInfo, or CycleItem it's attached to
+  parentId: UUID; // ID of the Cycle, CycleMapInfo, CycleItem, or a composite key (e.g., cycleId_objectType) it's attached to
   parentType: NoteParentType;
+  isPinned?: boolean;
 }

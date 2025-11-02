@@ -43,7 +43,7 @@ Document and save in Jira the statistical records and review priority before con
         updatedAt: '7/25/2024',
         updatedBy: 'Tzipi W',
         map: 'Detroit',
-        configuration: 'Standard',
+        configuration: 'Vanilla',
     },
     {
         id: 't-2',
@@ -60,7 +60,7 @@ Document and save in Jira the statistical records and review priority before con
         updatedAt: '7/25/2024',
         updatedBy: 'Tzipi W',
         map: 'Detroit',
-        configuration: 'Standard',
+        configuration: 'Vanilla',
     },
     {
         id: 't-3',
@@ -80,7 +80,7 @@ Document and save in Jira the statistical records and review priority before con
         updatedAt: '7/23/2024',
         updatedBy: 'Michelle H',
         map: 'Munich',
-        configuration: 'Rainy',
+        configuration: 'Const-Data',
     },
     {
       id: 't-4',
@@ -99,7 +99,7 @@ Document and save in Jira the statistical records and review priority before con
       updatedAt: '7/21/2024',
       updatedBy: 'Halima A',
       map: 'IL_HW',
-      configuration: 'Standard',
+      configuration: 'Vanilla',
     },
     {
       id: 't-5',
@@ -199,7 +199,7 @@ export const mockCycleItems: CycleItem[] = [
         result: CycleItemResult.NOT_RUN,
         updatedAt: '7/24/2024',
         map: 'Detroit',
-        configuration: 'Standard'
+        configurations: ['Vanilla', 'With Slicing']
     },
     {
         id: 'ci-2',
@@ -217,7 +217,7 @@ export const mockCycleItems: CycleItem[] = [
         result: CycleItemResult.PASSED,
         updatedAt: '7/25/2024',
         map: 'Detroit',
-        configuration: 'Standard'
+        configurations: ['Vanilla']
     },
     {
         id: 'ci-3',
@@ -235,7 +235,7 @@ export const mockCycleItems: CycleItem[] = [
         result: CycleItemResult.FAILED,
         updatedAt: '7/25/2024',
         map: 'Munich',
-        configuration: 'Rainy'
+        configurations: ['Const-Data']
     },
     {
         id: 'ci-4',
@@ -253,7 +253,7 @@ export const mockCycleItems: CycleItem[] = [
         result: CycleItemResult.BLOCKED,
         updatedAt: '7/24/2024',
         map: 'IL_HW',
-        configuration: 'Standard'
+        configurations: ['Vanilla']
     },
      {
         id: 'ci-5',
@@ -271,7 +271,43 @@ export const mockCycleItems: CycleItem[] = [
         result: CycleItemResult.NOT_RUN,
         updatedAt: '7/25/2024',
         map: 'IL_HW',
-        configuration: 'Standard'
+        configurations: ['Vanilla']
+    },
+    {
+        id: 'ci-6',
+        cycleId: 'c-1',
+        scopeId: 's-1',
+        testId: 't-6',
+        testSnapshot: {
+            name: mockTests[5].name,
+            steps: mockTests[5].steps,
+            labels: mockTests[5].labels,
+            affectedObjectType: mockTests[5].affectedObjectType,
+            testMethod: mockTests[5].testMethod,
+        },
+        assigneeId: 'u-4', // Yogev M
+        result: CycleItemResult.EXECUTING,
+        updatedAt: '7/26/2024',
+        map: 'Detroit',
+        configurations: ['Vanilla']
+    },
+    {
+        id: 'ci-7',
+        cycleId: 'c-1',
+        scopeId: 's-2',
+        testId: 't-5', // This test is archived, but that's fine for a cycle item.
+        testSnapshot: {
+            name: mockTests[4].name,
+            steps: mockTests[4].steps,
+            labels: mockTests[4].labels,
+            affectedObjectType: mockTests[4].affectedObjectType,
+            testMethod: mockTests[4].testMethod,
+        },
+        assigneeId: 'u-3', // Halima A
+        result: CycleItemResult.PENDING_REVIEW,
+        updatedAt: '7/26/2024',
+        map: 'Munich',
+        configurations: ['Const-Data']
     },
 ];
 
@@ -304,13 +340,32 @@ export const mockNotes: Note[] = [
         updatedAt: new Date(Date.now() - 86400000).toISOString(),
         content: '<p>Detroit V2V runs are complete. SA review is pending.</p>'
     },
+    {
+        id: 'n-4',
+        parentId: 'c-1_Lane_Type', // cycleId_affectedObjectType
+        parentType: 'objectType',
+        authorId: 'u-2', // Michelle H
+        createdAt: new Date(Date.now() - 86400000).toISOString(),
+        updatedAt: new Date(Date.now() - 86400000).toISOString(),
+        content: '<p>General observation on <b>Lane Type</b> tests for this cycle: we are seeing a higher than usual number of mismatches in urban environments. This needs further investigation across all maps.</p>'
+    },
+    {
+        id: 'n-5',
+        parentId: 'c-1',
+        parentType: 'cycle',
+        authorId: 'u-1', // Tzipi W
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        content: '<p><b>Important:</b> The automated V2V probe analysis tool is currently down. Please use manual review methods for all V2V tests until further notice.</p>',
+        isPinned: true,
+    }
 ];
 
 
 // MAPS & CONFIGURATIONS
 export const mockMaps: string[] = ['Detroit', 'IL_HW', 'JLM', 'Manhattan', 'Munich', 'Paris', 'TLV', 'Tokyo', 'Metropolis', 'Gotham'];
 
-export const mockConfigurations: string[] = ['Standard', 'Night', 'Rainy', 'C2P_Only', 'V2V_Only', 'High_Traffic'];
+export const mockConfigurations: string[] = ['None', 'Const-Data', 'Vanilla', 'Prod-CD-Event', 'W/O Slicing', 'With Slicing', 'CM'];
 
 
 // UTILITY to build folder tree structure

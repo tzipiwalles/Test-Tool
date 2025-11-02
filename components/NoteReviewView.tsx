@@ -12,6 +12,8 @@ const getResultColorClass = (result: CycleItemResult) => {
         case CycleItemResult.PASSED: return 'text-green-600 dark:text-green-400 border-green-500';
         case CycleItemResult.FAILED: return 'text-red-600 dark:text-red-400 border-red-500';
         case CycleItemResult.BLOCKED: return 'text-yellow-600 dark:text-yellow-400 border-yellow-500';
+        case CycleItemResult.EXECUTING: return 'text-blue-600 dark:text-blue-400 border-blue-500';
+        case CycleItemResult.PENDING_REVIEW: return 'text-purple-600 dark:text-purple-400 border-purple-500';
         case CycleItemResult.NOT_RUN:
         default:
             return 'text-gray-600 dark:text-gray-400 border-gray-500';
@@ -61,6 +63,9 @@ const NoteReviewView: React.FC<{ cycle: Cycle, onBack: () => void }> = ({ cycle,
                         const test = tests.find(t => t.id === cycleItem.testId);
                         context = { type: 'Test', name: cycleItem.testSnapshot.name, result: cycleItem.result, test };
                     }
+                } else if (note.parentType === 'objectType' && note.parentId.startsWith(cycle.id + '_')) {
+                    const objectTypeName = note.parentId.split('_').slice(1).join('_');
+                    context = { type: 'Object Type', name: objectTypeName };
                 }
                 
                 const author = users.find(u => u.id === note.authorId);
@@ -107,9 +112,17 @@ const NoteReviewView: React.FC<{ cycle: Cycle, onBack: () => void }> = ({ cycle,
                 }
             }
             if (selectedAffectedObjects.length > 0) {
-                if (note.parentType !== 'item' || !note.context.test?.affectedObjectType || !selectedAffectedObjects.includes(note.context.test.affectedObjectType)) {
-                    return false;
-                }
+                 if (note.parentType === 'item') {
+                    if (!note.context.test?.affectedObjectType || !selectedAffectedObjects.includes(note.context.test.affectedObjectType)) {
+                        return false;
+                    }
+                 } else if (note.parentType === 'objectType') {
+                    if (!selectedAffectedObjects.includes(note.context.name)) {
+                        return false;
+                    }
+                 } else {
+                     return false; // Notes for cycle/map don't have an affected object
+                 }
             }
             return true;
         });
@@ -121,7 +134,7 @@ const NoteReviewView: React.FC<{ cycle: Cycle, onBack: () => void }> = ({ cycle,
         const groups = filteredNotes.reduce((acc, note) => {
             let key = 'Uncategorized';
             if (groupBy === 'result') {
-                key = note.context.result ? note.context.result.replace(/_/g, ' ').replace(/\b\w/g, (l:string) => l.toUpperCase()) : 'Cycle/Map Notes';
+                key = note.context.result ? note.context.result.replace(/_/g, ' ').replace(/\b\w/g, (l:string) => l.toUpperCase()) : 'Cycle/Map/Object Notes';
             } else if (groupBy === 'author') {
                 key = note.author?.displayName || 'Unknown Author';
             } else if (groupBy === 'map') {
@@ -134,7 +147,13 @@ const NoteReviewView: React.FC<{ cycle: Cycle, onBack: () => void }> = ({ cycle,
                 }
                 key = noteMap || 'N/A';
             } else if (groupBy === 'affectedObjectType') {
-                key = note.context.test?.affectedObjectType || 'N/A';
+                 if (note.parentType === 'item') {
+                    key = note.context.test?.affectedObjectType || 'N/A';
+                 } else if (note.parentType === 'objectType') {
+                    key = note.context.name;
+                 } else {
+                    key = 'N/A';
+                 }
             }
 
             if (!acc[key]) {
@@ -255,7 +274,7 @@ const NoteReviewView: React.FC<{ cycle: Cycle, onBack: () => void }> = ({ cycle,
                             <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
                                 {Object.entries(resultCounts).map(([result, count]) => (
                                     <span key={result} className={getResultColorClass(result as CycleItemResult)}>
-                                        {result.replace('_', ' ').toUpperCase()}: {count}
+                                        {result.replace(/_/g, ' ').toUpperCase()}: {count}
                                     </span>
                                 ))}
                             </div>
@@ -298,7 +317,7 @@ const NoteCard: React.FC<{note: any, onPin: (note: any) => void}> = ({ note, onP
                             Note on {note.context.type}: <span className="font-medium text-gray-700 dark:text-gray-300">{note.context.name}</span>
                             {note.context.result && 
                                 <span className={`ml-2 px-2 py-0.5 text-xs rounded-full border ${getResultColorClass(note.context.result)}`}>
-                                    {note.context.result.replace('_', ' ')}
+                                    {note.context.result.replace(/_/g, ' ')}
                                 </span>
                             }
                         </p>

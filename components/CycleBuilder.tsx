@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Cycle, Test, CycleItem, CycleItemResult, User, CycleStatus, Scope, ScopeName, Priority, Folder, Permissions, UserRole, CycleMapInfo, UUID, Note, NoteParentType } from '../types';
 import { useData } from './DataContext';
 import { buildFolderTree } from '../data/mockData';
@@ -20,6 +20,104 @@ import NotesPanel from './NotesPanel';
 import NoteReviewView from './NoteReviewView';
 import { ReviewIcon } from './icons/ReviewIcon';
 import { BuilderIcon } from './icons/BuilderIcon';
+import { PinIcon } from './icons/PinIcon';
+import { PlayIcon } from './icons/PlayIcon';
+
+const MultiSelectPills: React.FC<{
+  options: string[];
+  selected: string[];
+  onChange: (selected: string[]) => void;
+  disabled?: boolean;
+}> = ({ options, selected, onChange, disabled }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const [listStyle, setListStyle] = useState<React.CSSProperties>({});
+
+  const updateListPosition = useCallback(() => {
+    if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        setListStyle({
+            position: 'fixed',
+            top: `${rect.bottom + 2}px`,
+            left: `${rect.left}px`,
+            width: `${rect.width}px`,
+            zIndex: 1000,
+        });
+    }
+  }, []);
+
+  useEffect(() => {
+      if (isOpen) {
+          updateListPosition();
+          window.addEventListener('resize', updateListPosition);
+          window.addEventListener('scroll', updateListPosition, true);
+      }
+      return () => {
+          window.removeEventListener('resize', updateListPosition);
+          window.removeEventListener('scroll', updateListPosition, true);
+      };
+  }, [isOpen, updateListPosition]);
+  
+  useEffect(() => {
+      const handleClickOutside = (event: MouseEvent) => {
+          if (
+              isOpen &&
+              containerRef.current && !containerRef.current.contains(event.target as Node) &&
+              listRef.current && !listRef.current.contains(event.target as Node)
+          ) {
+              setIsOpen(false);
+          }
+      };
+
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+
+  const toggleOption = (option: string) => {
+    if (disabled) return;
+    const newSelected = selected.includes(option)
+      ? selected.filter(s => s !== option)
+      : [...selected, option];
+    onChange(newSelected);
+  };
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+        <div 
+            onClick={() => !disabled && setIsOpen(prev => !prev)} 
+            className={`flex flex-wrap items-center gap-1 p-1 rounded-md border ${disabled ? 'bg-transparent' : 'cursor-pointer hover:border-gray-300 dark:hover:border-gray-600 focus:ring-1 focus:ring-blue-accent focus:border-blue-accent bg-transparent' } border-transparent`}
+        >
+            {selected.length === 0 ? (
+                <span className="text-gray-500 dark:text-gray-400 text-sm italic px-1">None</span>
+            ) : (
+                selected.map(s => (
+                    <span key={s} className="bg-gray-200 dark:bg-gray-600 text-xs px-2 py-0.5 rounded-md">{s}</span>
+                ))
+            )}
+        </div>
+        {isOpen && !disabled && (
+            <ul ref={listRef} style={listStyle} className="mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-48 overflow-y-auto">
+            {options.map(option => (
+                <li key={option} className="px-3 py-1.5 text-sm cursor-pointer hover:bg-blue-accent hover:text-white text-gray-800 dark:text-gray-200">
+                    <label className="flex items-center space-x-2 w-full cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={selected.includes(option)}
+                            onChange={() => toggleOption(option)}
+                            className="h-4 w-4 bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-600 rounded text-blue-accent focus:ring-blue-accent"
+                        />
+                        <span>{option}</span>
+                    </label>
+                </li>
+            ))}
+            </ul>
+        )}
+    </div>
+  );
+};
+
 
 const PriorityBadge: React.FC<{ priority: Priority }> = ({ priority }) => {
     const styles = {
@@ -268,7 +366,7 @@ interface BulkCycleItemChanges {
   assigneeId?: string | null;
   result?: CycleItemResult;
   map?: string;
-  configuration?: string;
+  configurations?: string[];
 }
 
 const BulkCycleItemEditModal: React.FC<{
@@ -276,12 +374,12 @@ const BulkCycleItemEditModal: React.FC<{
   onSave: (changes: BulkCycleItemChanges) => void;
   count: number;
 }> = ({ onClose, onSave, count }) => {
-  const { users } = useData();
+  const { users, configurations } = useData();
   const [updates, setUpdates] = useState<BulkCycleItemChanges>(() => ({
     assigneeId: null,
     result: CycleItemResult.NOT_RUN,
     map: '',
-    configuration: '',
+    configurations: [],
   }));
   const [enabledFields, setEnabledFields] = useState<Set<keyof BulkCycleItemChanges>>(new Set());
 
@@ -306,8 +404,8 @@ const BulkCycleItemEditModal: React.FC<{
     if (enabledFields.has('map')) {
       finalChanges.map = updates.map;
     }
-    if (enabledFields.has('configuration')) {
-      finalChanges.configuration = updates.configuration;
+    if (enabledFields.has('configurations')) {
+      finalChanges.configurations = updates.configurations;
     }
     onSave(finalChanges);
     onClose();
@@ -347,8 +445,10 @@ const BulkCycleItemEditModal: React.FC<{
                 {renderField('map', 'Map', 
                     <input type="text" value={updates.map || ''} onChange={e => setUpdates(p => ({...p, map: e.target.value}))} className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2" />
                 )}
-                {renderField('configuration', 'Configuration', 
-                    <input type="text" value={updates.configuration || ''} onChange={e => setUpdates(p => ({...p, configuration: e.target.value}))} className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2" />
+                {renderField('configurations', 'Configurations', 
+                    <select multiple value={updates.configurations || []} onChange={e => setUpdates(p => ({...p, configurations: Array.from(e.target.selectedOptions, option => option.value)}))} className="w-full h-32 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2">
+                         {configurations.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
                 )}
             </div>
             <div className="flex justify-end space-x-3 pt-6">
@@ -432,13 +532,17 @@ const CycleProgress: React.FC<{ items: CycleItem[] }> = ({ items }) => {
     const passed = getCount(CycleItemResult.PASSED);
     const failed = getCount(CycleItemResult.FAILED);
     const blocked = getCount(CycleItemResult.BLOCKED);
-    const notRun = total - passed - failed - blocked;
+    const executing = getCount(CycleItemResult.EXECUTING);
+    const pendingReview = getCount(CycleItemResult.PENDING_REVIEW);
+    const notRun = total - passed - failed - blocked - executing - pendingReview;
   
     return (
-        <div className="flex w-full h-2.5 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700" title={`Passed: ${passed}, Failed: ${failed}, Blocked: ${blocked}, Not Run: ${notRun}`}>
+        <div className="flex w-full h-2.5 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700" title={`Passed: ${passed}, Failed: ${failed}, Blocked: ${blocked}, Executing: ${executing}, Pending Review: ${pendingReview}, Not Run: ${notRun}`}>
           <div className="bg-green-500" style={{ width: `${(passed / total) * 100}%` }}></div>
           <div className="bg-red-500" style={{ width: `${(failed / total) * 100}%` }}></div>
           <div className="bg-yellow-500" style={{ width: `${(blocked / total) * 100}%` }}></div>
+          <div className="bg-blue-400" style={{ width: `${(executing / total) * 100}%` }}></div>
+          <div className="bg-purple-500" style={{ width: `${(pendingReview / total) * 100}%` }}></div>
         </div>
     );
 };
@@ -449,6 +553,8 @@ const getResultColorClass = (result: CycleItemResult) => {
         case CycleItemResult.PASSED: return 'text-green-600 dark:text-green-400 font-medium';
         case CycleItemResult.FAILED: return 'text-red-600 dark:text-red-400 font-medium';
         case CycleItemResult.BLOCKED: return 'text-yellow-600 dark:text-yellow-400 font-medium';
+        case CycleItemResult.EXECUTING: return 'text-blue-600 dark:text-blue-400 font-medium';
+        case CycleItemResult.PENDING_REVIEW: return 'text-purple-600 dark:text-purple-400 font-medium';
         case CycleItemResult.NOT_RUN:
         default:
             return 'text-gray-600 dark:text-gray-400';
@@ -460,6 +566,7 @@ const initialFilters = {
   assigneeId: 'all',
   result: 'all',
   priority: 'all',
+  configuration: 'all',
 };
 
 type NoteTarget = {
@@ -474,7 +581,7 @@ const CycleBuilder: React.FC<{
   onBack: () => void;
   onUpdateCycle: (cycle: Cycle) => void;
 }> = ({ cycle, onBack, onUpdateCycle }) => {
-    const { cycleItems, setCycleItems, users, scopes, setScopes, tests, maps, setMaps, configurations, permissions, notes, setNotes, currentUser } = useData();
+    const { cycleItems, setCycleItems, users, scopes, setScopes, tests, maps, setMaps, configurations, setConfigurations, permissions, notes, setNotes, currentUser } = useData();
     const [editingCycle, setEditingCycle] = useState<Cycle>(cycle);
     const [isAddTestModalOpen, setIsAddTestModalOpen] = useState(false);
     const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
@@ -485,12 +592,17 @@ const CycleBuilder: React.FC<{
     const [filters, setFilters] = useState(initialFilters);
     const [editingNoteTarget, setEditingNoteTarget] = useState<NoteTarget | null>(null);
     const [viewMode, setViewMode] = useState<'builder' | 'review'>('builder');
+    const [isPinnedNoteVisible, setIsPinnedNoteVisible] = useState(true);
 
     const notesMap = useMemo(() => {
         const map = new Map<string, Note>();
         notes.forEach(note => map.set(note.parentId, note));
         return map;
     }, [notes]);
+
+    const pinnedNote = useMemo(() => {
+        return notes.find(n => n.parentId === cycle.id && n.isPinned);
+    }, [notes, cycle.id]);
 
     const cycleScopes = useMemo(() => scopes.filter(s => s.cycleId === cycle.id), [scopes, cycle.id]);
     const [selectedScopeId, setSelectedScopeId] = useState<string | null>(cycleScopes[0]?.id || null);
@@ -504,7 +616,7 @@ const CycleBuilder: React.FC<{
 
     const filteredItems = useMemo(() => {
         return itemsInCurrentScope.filter(item => {
-            const { name, assigneeId, result, priority } = filters;
+            const { name, assigneeId, result, priority, configuration } = filters;
             const test = item.test as Test; // We've filtered out items without tests
     
             if (name && !item.testSnapshot.name.toLowerCase().includes(name.toLowerCase())) {
@@ -521,6 +633,9 @@ const CycleBuilder: React.FC<{
                 return false;
             }
             if (priority !== 'all' && test.priority !== priority) {
+                return false;
+            }
+            if (configuration !== 'all' && !item.configurations.includes(configuration)) {
                 return false;
             }
             return true;
@@ -600,24 +715,11 @@ const CycleBuilder: React.FC<{
     const handleAddTests = (testsToAdd: Test[], mapsToAdd: string[], configsToAdd: string[]) => {
         if (!selectedScopeId) return;
 
-        let combinations: { map: string | null; config: string | null }[] = [];
-        if (mapsToAdd.length === 0 && configsToAdd.length === 0) {
-            combinations.push({ map: null, config: null });
-        } else if (mapsToAdd.length > 0 && configsToAdd.length === 0) {
-            combinations = mapsToAdd.map(map => ({ map, config: null }));
-        } else if (mapsToAdd.length === 0 && configsToAdd.length > 0) {
-            combinations = configsToAdd.map(config => ({ map: null, config }));
-        } else {
-            mapsToAdd.forEach(map => {
-                configsToAdd.forEach(config => {
-                    combinations.push({ map, config });
-                });
-            });
-        }
+        const mapCombinations = mapsToAdd.length > 0 ? mapsToAdd : [null];
     
         const newItems: CycleItem[] = testsToAdd.flatMap(test =>
-            combinations.map(({ map, config }) => ({
-                id: `ci-${Date.now()}-${test.id}-${map}-${config}-${Math.random().toString(36).substring(2, 9)}`,
+            mapCombinations.map(map => ({
+                id: `ci-${Date.now()}-${test.id}-${map}-${Math.random().toString(36).substring(2, 9)}`,
                 cycleId: cycle.id,
                 scopeId: selectedScopeId,
                 testId: test.id,
@@ -626,7 +728,7 @@ const CycleBuilder: React.FC<{
                 result: CycleItemResult.NOT_RUN,
                 updatedAt: new Date().toLocaleDateString(),
                 map: map ?? test.map ?? null,
-                configuration: config ?? test.configuration ?? null,
+                configurations: configsToAdd.length > 0 ? configsToAdd : (test.configuration ? [test.configuration] : []),
             }))
         );
 
@@ -641,20 +743,21 @@ const CycleBuilder: React.FC<{
         setCycleItems(prev => prev.filter(item => item.id !== itemId));
     };
 
-    const handleSaveNote = (noteContent: string) => {
+    const handleSaveNote = (noteContent: string, isPinned: boolean) => {
         if (!editingNoteTarget || !currentUser) return;
 
         const existingNote = notes.find(n => n.parentId === editingNoteTarget.id);
         const now = new Date().toISOString();
 
         if (existingNote) {
-            setNotes(prev => prev.map(n => n.id === existingNote.id ? { ...n, content: noteContent, updatedAt: now, authorId: currentUser.id } : n));
+            setNotes(prev => prev.map(n => n.id === existingNote.id ? { ...n, content: noteContent, isPinned, updatedAt: now, authorId: currentUser.id } : n));
         } else {
             const newNote: Note = {
                 id: `n-${Date.now()}`,
                 parentId: editingNoteTarget.id,
                 parentType: editingNoteTarget.type,
                 content: noteContent,
+                isPinned,
                 authorId: currentUser.id,
                 createdAt: now,
                 updatedAt: now,
@@ -667,35 +770,42 @@ const CycleBuilder: React.FC<{
         if (groupBy === 'none') return null;
     
         const groups = filteredItems.reduce((acc, item) => {
-            let key: string;
+            let keys: string[] = [];
     
             switch (groupBy) {
                 case 'assignee': {
                     const user = users.find(u => u.id === item.assigneeId);
-                    key = user ? user.displayName : 'Unassigned';
+                    keys.push(user ? user.displayName : 'Unassigned');
                     break;
                 }
                 case 'result':
-                    key = item.result.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    keys.push(item.result.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
                     break;
                 case 'map':
-                    key = item.map || 'No Map';
+                    keys.push(item.map || 'No Map');
                     break;
                 case 'configuration':
-                    key = item.configuration || 'No Configuration';
+                    if (item.configurations.length > 0) {
+                        keys = item.configurations;
+                    } else {
+                        keys.push('No Configuration');
+                    }
                     break;
                 case 'affectedObjectType':
-                    key = (item.test as Test).affectedObjectType || 'No Affected Object';
+                    keys.push((item.test as Test).affectedObjectType || 'No Affected Object');
                     break;
                 default:
-                    key = 'Unknown Group'; // Fallback
+                    keys.push('Unknown Group'); // Fallback
                     break;
             }
-    
-            if (!acc[key]) {
-                acc[key] = [];
-            }
-            acc[key].push(item);
+            
+            keys.forEach(key => {
+                if (!acc[key]) {
+                    acc[key] = [];
+                }
+                acc[key].push(item);
+            });
+
             return acc;
         }, {} as Record<string, typeof filteredItems>);
     
@@ -787,7 +897,7 @@ const CycleBuilder: React.FC<{
         }, new Map<string, number>());
       }, [itemsInCurrentScope]);
 
-    const isFiltered = useMemo(() => Object.values(filters).some(v => v && v !== 'all'), [filters]);
+    const isFiltered = useMemo(() => Object.values(filters).some((v, i) => v && v !== 'all' && Object.keys(filters)[i] !== 'configuration' || (Object.keys(filters)[i] === 'configuration' && v !== 'all')), [filters]);
 
     const cycleDetailsSummary = [
         editingCycle.version ? `Ver: ${editingCycle.version}` : '',
@@ -884,6 +994,21 @@ const CycleBuilder: React.FC<{
                         </div>
                     </div>
                 </header>
+
+                {pinnedNote && isPinnedNoteVisible && (
+                    <div className="relative flex-shrink-0 mb-4 p-4 rounded-lg bg-blue-100 dark:bg-blue-900/50 border border-blue-200 dark:border-blue-800/70 text-blue-800 dark:text-blue-200">
+                        <div className="flex">
+                            <PinIcon className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1">
+                                <strong className="font-semibold">Pinned Note:</strong>
+                                <div className="prose dark:prose-invert prose-sm max-w-none mt-1" dangerouslySetInnerHTML={{ __html: pinnedNote.content }}/>
+                            </div>
+                            <button onClick={() => setIsPinnedNoteVisible(false)} className="absolute top-2 right-2 p-1 rounded-full hover:bg-blue-200 dark:hover:bg-blue-800/80">
+                                <XCircleIcon className="w-5 h-5"/>
+                            </button>
+                        </div>
+                    </div>
+                )}
                 
                 <div className="space-y-4 mb-4 flex-shrink-0">
                     <details className="group bg-gray-100 dark:bg-gray-800/50 rounded-lg">
@@ -1051,7 +1176,7 @@ const CycleBuilder: React.FC<{
                                 <option value="assignee">Assignee</option>
                                 <option value="map">Map</option>
                                 <option value="configuration">Configuration</option>
-                                <option value="affectedObjectType">Affected Object</option>
+                                <option value="affectedObjectType">Affected Object Type</option>
                             </select>
                         </div>
                         {permissions.canRunTests && selectedItemIds.size > 0 && (
@@ -1069,6 +1194,12 @@ const CycleBuilder: React.FC<{
                                 <button onClick={() => handleBulkStatusChange(CycleItemResult.BLOCKED)} title="Mark as Blocked" className="p-1 rounded-md hover:bg-yellow-100 dark:hover:bg-yellow-900/50">
                                     <StopCircleIcon className="w-5 h-5 text-yellow-500"/>
                                 </button>
+                                <button onClick={() => handleBulkStatusChange(CycleItemResult.EXECUTING)} title="Mark as Executing" className="p-1 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50">
+                                    <PlayIcon className="w-5 h-5 text-blue-500"/>
+                                </button>
+                                <button onClick={() => handleBulkStatusChange(CycleItemResult.PENDING_REVIEW)} title="Mark as Pending Review" className="p-1 rounded-md hover:bg-purple-100 dark:hover:bg-purple-900/50">
+                                    <ReviewIcon className="w-5 h-5 text-purple-500"/>
+                                </button>
                                 <button onClick={() => handleBulkStatusChange(CycleItemResult.NOT_RUN)} title="Mark as Not Run" className="p-1 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700">
                                     <ClockIcon className="w-5 h-5 text-gray-500 dark:text-gray-400"/>
                                 </button>
@@ -1083,8 +1214,8 @@ const CycleBuilder: React.FC<{
                 </div>
 
                 <div className="p-3 border-y border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 flex-shrink-0">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-x-4 gap-y-2 items-end">
-                        <div className="relative sm:col-span-2 md:col-span-3 lg:col-span-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-4 gap-y-2 items-end">
+                        <div className="relative sm:col-span-2 md:col-span-2 lg:col-span-2">
                             <label htmlFor="filter-name" className="text-xs font-medium text-gray-500 dark:text-gray-400">Test Name</label>
                             <input type="text" id="filter-name" name="name" value={filters.name} onChange={handleFilterChange} placeholder="Search by name..." className="mt-1 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1 text-sm focus:ring-blue-accent focus:border-blue-accent"/>
                         </div>
@@ -1103,6 +1234,13 @@ const CycleBuilder: React.FC<{
                                 {Object.values(CycleItemResult).map(r => <option key={r} value={r} className="capitalize">{r.replace(/_/g, ' ')}</option>)}
                             </select>
                         </div>
+                         <div>
+                            <label htmlFor="filter-configuration" className="text-xs font-medium text-gray-500 dark:text-gray-400">Configuration</label>
+                            <select id="filter-configuration" name="configuration" value={filters.configuration} onChange={handleFilterChange} className="mt-1 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm focus:ring-blue-accent focus:border-blue-accent">
+                                <option value="all">All Configurations</option>
+                                {configurations.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                        </div>
                         <div>
                             <label htmlFor="filter-priority" className="text-xs font-medium text-gray-500 dark:text-gray-400">Priority</label>
                             <select id="filter-priority" name="priority" value={filters.priority} onChange={handleFilterChange} className="mt-1 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm focus:ring-blue-accent focus:border-blue-accent">
@@ -1111,7 +1249,7 @@ const CycleBuilder: React.FC<{
                             </select>
                         </div>
                         {isFiltered && (
-                            <div className="lg:col-start-5">
+                            <div className="lg:col-start-6">
                                 <button onClick={clearFilters} className="w-full px-3 py-1 text-sm rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">Clear Filters</button>
                             </div>
                         )}
@@ -1139,7 +1277,7 @@ const CycleBuilder: React.FC<{
                                 <th className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400 w-2/5">Test Name</th>
                                 <th className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Assignee</th>
                                 <th className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Map</th>
-                                <th className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Config</th>
+                                <th className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Configs</th>
                                 <th className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Result</th>
                                 <th className="p-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Actions</th>
                             </tr>
@@ -1150,6 +1288,9 @@ const CycleBuilder: React.FC<{
                                 const groupItemIds = items.map(i => i.id);
                                 const allSelectedInGroup = groupItemIds.length > 0 && groupItemIds.every(id => selectedItemIds.has(id));
                                 const someSelectedInGroup = groupItemIds.some(id => selectedItemIds.has(id));
+                                
+                                const objectTypeNoteId = `${cycle.id}_${groupName}`;
+
                                 return (
                                     <React.Fragment key={groupName}>
                                         <tr className="bg-gray-100 dark:bg-gray-800 sticky top-10 z-[5]">
@@ -1164,7 +1305,16 @@ const CycleBuilder: React.FC<{
                                                         onChange={() => handleSelectGroup(items)}
                                                         className="h-4 w-4 bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-600 rounded text-blue-accent focus:ring-blue-accent mr-3"
                                                     />
-                                                    {groupName} ({items.length})
+                                                    <span>{groupName} ({items.length})</span>
+                                                    {groupBy === 'affectedObjectType' && (
+                                                        <button 
+                                                            onClick={() => setEditingNoteTarget({ id: objectTypeNoteId, type: 'objectType', name: `Notes for Object Type: ${groupName}` })} 
+                                                            title={`Notes for Object Type: ${groupName}`} 
+                                                            className="ml-2 p-1 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600"
+                                                        >
+                                                            <NoteIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" filled={notesMap.has(objectTypeNoteId)} />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -1226,15 +1376,13 @@ const CycleTestRow: React.FC<{
                 />
             </fieldset>
         </td>
-        <td className="p-1">
-            <fieldset disabled={!permissions.canRunTests} className="disabled:opacity-70">
-                <EditableDatalistInput
-                    value={item.configuration}
-                    onChange={value => onUpdateItem(item.id, { configuration: value })}
-                    options={configurations}
-                    inputClassName="w-full bg-transparent text-sm p-1 rounded-md border border-transparent text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 focus:ring-1 focus:ring-blue-accent focus:border-blue-accent focus:bg-white dark:focus:bg-gray-700 disabled:bg-transparent dark:disabled:bg-transparent"
-                />
-            </fieldset>
+        <td className="p-1 min-w-[150px]">
+             <MultiSelectPills
+                options={configurations}
+                selected={item.configurations}
+                onChange={selected => onUpdateItem(item.id, { configurations: selected })}
+                disabled={!permissions.canRunTests}
+             />
         </td>
         <td className="p-2">
             <select

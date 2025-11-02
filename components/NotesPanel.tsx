@@ -4,6 +4,7 @@ import { NoteParentType, UUID, User } from '../types';
 import RichTextEditor from './RichTextEditor';
 import { XCircleIcon } from './icons/XCircleIcon';
 import { SaveIcon } from './icons/SaveIcon';
+import { PinIcon } from './icons/PinIcon';
 
 interface NotesPanelProps {
   target: {
@@ -12,7 +13,7 @@ interface NotesPanelProps {
     name: string;
   };
   onClose: () => void;
-  onSave: (content: string) => void;
+  onSave: (content: string, isPinned: boolean) => void;
 }
 
 const UserAvatar: React.FC<{ user: User | null }> = ({ user }) => {
@@ -38,9 +39,11 @@ const NotesPanel: React.FC<NotesPanelProps> = ({ target, onClose, onSave }) => {
   const existingNote = useMemo(() => notes.find(n => n.parentId === target.id), [notes, target.id]);
 
   const [content, setContent] = useState(existingNote?.content || '');
+  const [isPinned, setIsPinned] = useState(existingNote?.isPinned || false);
   
   useEffect(() => {
       setContent(existingNote?.content || '');
+      setIsPinned(existingNote?.isPinned || false);
   }, [existingNote]);
 
   const author = useMemo(() => {
@@ -49,7 +52,7 @@ const NotesPanel: React.FC<NotesPanelProps> = ({ target, onClose, onSave }) => {
   }, [existingNote, users]);
 
   const handleSave = () => {
-    onSave(content);
+    onSave(content, isPinned);
     onClose();
   };
 
@@ -75,7 +78,7 @@ const NotesPanel: React.FC<NotesPanelProps> = ({ target, onClose, onSave }) => {
         </main>
 
         <footer className="flex-shrink-0 flex items-center justify-between p-4 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
-            <div>
+            <div className="flex items-center space-x-4">
                  {author && existingNote && (
                     <div className="flex items-center space-x-2">
                         <UserAvatar user={author} />
@@ -85,6 +88,18 @@ const NotesPanel: React.FC<NotesPanelProps> = ({ target, onClose, onSave }) => {
                             <span>{new Date(existingNote.updatedAt).toLocaleString()}</span>
                         </div>
                     </div>
+                )}
+                 {permissions.canAddNotes && target.type === 'cycle' && (
+                    <label className="flex items-center space-x-2 cursor-pointer text-sm text-gray-600 dark:text-gray-300">
+                        <input
+                            type="checkbox"
+                            checked={isPinned}
+                            onChange={(e) => setIsPinned(e.target.checked)}
+                            className="h-4 w-4 bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-600 rounded text-blue-accent focus:ring-blue-accent"
+                        />
+                        <PinIcon className="w-4 h-4" />
+                        <span>Pin this note to the top of the cycle</span>
+                    </label>
                 )}
             </div>
           {permissions.canAddNotes && (

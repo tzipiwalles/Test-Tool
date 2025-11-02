@@ -65,13 +65,17 @@ const CycleProgress: React.FC<{ items: CycleItem[] }> = ({ items }) => {
   const passed = getCount(CycleItemResult.PASSED);
   const failed = getCount(CycleItemResult.FAILED);
   const blocked = getCount(CycleItemResult.BLOCKED);
-  const notRun = getCount(CycleItemResult.NOT_RUN);
+  const executing = getCount(CycleItemResult.EXECUTING);
+  const pendingReview = getCount(CycleItemResult.PENDING_REVIEW);
+  const notRun = total - passed - failed - blocked - executing - pendingReview;
 
   return (
-      <div className="flex w-full h-2.5 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700" title={`Passed: ${passed}, Failed: ${failed}, Blocked: ${blocked}, Not Run: ${notRun}`}>
+      <div className="flex w-full h-2.5 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700" title={`Passed: ${passed}, Failed: ${failed}, Blocked: ${blocked}, Executing: ${executing}, Pending Review: ${pendingReview}, Not Run: ${notRun}`}>
         <div className="bg-green-500" style={{ width: `${(passed / total) * 100}%` }}></div>
         <div className="bg-red-500" style={{ width: `${(failed / total) * 100}%` }}></div>
         <div className="bg-yellow-500" style={{ width: `${(blocked / total) * 100}%` }}></div>
+        <div className="bg-blue-400" style={{ width: `${(executing / total) * 100}%` }}></div>
+        <div className="bg-purple-500" style={{ width: `${(pendingReview / total) * 100}%` }}></div>
       </div>
   );
 };
