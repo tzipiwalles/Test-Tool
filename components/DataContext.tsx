@@ -118,32 +118,33 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Helper function to create a state setter that also broadcasts the change.
   const createBroadcastingSetter = <T,>(
     setter: React.Dispatch<React.SetStateAction<T>>,
-    messageType: string,
-    currentState: T
+    messageType: string
   ): React.Dispatch<React.SetStateAction<T>> => {
     return useCallback((updater) => {
-      // The updater can be a new value or a function like in useState.
-      // We calculate the new state first.
-      const newState = typeof updater === 'function' 
-        ? (updater as (prevState: T) => T)(currentState) 
-        : updater;
-      
-      // Update the local state.
-      setter(newState);
-      
-      // Broadcast the new state to other tabs.
-      channel.postMessage({ type: messageType, payload: newState });
-    }, [setter, messageType, currentState]);
+      // Always call the raw setter with a function to get access to the latest state.
+      setter(prevState => {
+        // Compute the new state using the updater and the guaranteed-fresh previous state.
+        const newState = typeof updater === 'function'
+          ? (updater as (prevState: T) => T)(prevState)
+          : updater;
+        
+        // Broadcast the computed new state.
+        channel.postMessage({ type: messageType, payload: newState });
+        
+        // Return the new state for React to set.
+        return newState;
+      });
+    }, [setter, messageType]);
   };
 
-  const broadcastSetFolders = createBroadcastingSetter(setFolders, 'SET_FOLDERS', folders);
-  const broadcastSetTests = createBroadcastingSetter(setTests, 'SET_TESTS', tests);
-  const broadcastSetCycles = createBroadcastingSetter(setCycles, 'SET_CYCLES', cycles);
-  const broadcastSetScopes = createBroadcastingSetter(setScopes, 'SET_SCOPES', scopes);
-  const broadcastSetCycleItems = createBroadcastingSetter(setCycleItems, 'SET_CYCLE_ITEMS', cycleItems);
-  const broadcastSetNotes = createBroadcastingSetter(setNotes, 'SET_NOTES', notes);
-  const broadcastSetMaps = createBroadcastingSetter(setMaps, 'SET_MAPS', maps);
-  const broadcastSetConfigurations = createBroadcastingSetter(setConfigurations, 'SET_CONFIGURATIONS', configurations);
+  const broadcastSetFolders = createBroadcastingSetter(setFolders, 'SET_FOLDERS');
+  const broadcastSetTests = createBroadcastingSetter(setTests, 'SET_TESTS');
+  const broadcastSetCycles = createBroadcastingSetter(setCycles, 'SET_CYCLES');
+  const broadcastSetScopes = createBroadcastingSetter(setScopes, 'SET_SCOPES');
+  const broadcastSetCycleItems = createBroadcastingSetter(setCycleItems, 'SET_CYCLE_ITEMS');
+  const broadcastSetNotes = createBroadcastingSetter(setNotes, 'SET_NOTES');
+  const broadcastSetMaps = createBroadcastingSetter(setMaps, 'SET_MAPS');
+  const broadcastSetConfigurations = createBroadcastingSetter(setConfigurations, 'SET_CONFIGURATIONS');
 
 
   useEffect(() => {

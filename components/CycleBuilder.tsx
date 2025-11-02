@@ -23,6 +23,8 @@ import { BuilderIcon } from './icons/BuilderIcon';
 import { PinIcon } from './icons/PinIcon';
 import { PlayIcon } from './icons/PlayIcon';
 import { CopyIcon } from './icons/CopyIcon';
+import { EditIcon } from './icons/EditIcon';
+import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 
 const MultiSelectPills: React.FC<{
   options: string[];
@@ -135,6 +137,7 @@ const CycleStatusBadge: React.FC<{ status: CycleStatus }> = ({ status }) => {
     [CycleStatus.DRAFT]: 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-100',
     [CycleStatus.ACTIVE]: 'bg-blue-500 text-white',
     [CycleStatus.CLOSED]: 'bg-green-600 text-white',
+    [CycleStatus.ARCHIVED]: 'bg-gray-500 text-white',
   };
   return (
     <span className={`px-3 py-1 text-xs font-semibold rounded-full ${statusStyles[status]}`}>
@@ -594,6 +597,9 @@ const CycleBuilder: React.FC<{
     const [editingNoteTarget, setEditingNoteTarget] = useState<NoteTarget | null>(null);
     const [viewMode, setViewMode] = useState<'builder' | 'review'>('builder');
     const [isPinnedNoteVisible, setIsPinnedNoteVisible] = useState(true);
+    const [isEditingName, setIsEditingName] = useState(false);
+
+    const isArchived = editingCycle.status === CycleStatus.ARCHIVED;
 
     const notesMap = useMemo(() => {
         const map = new Map<string, Note>();
@@ -658,6 +664,15 @@ const CycleBuilder: React.FC<{
     const handleLabelsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setEditingCycle(prev => ({...prev, labels: e.target.value.split(',').map(l => l.trim())}));
     }
+
+    const handleNameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            setIsEditingName(false);
+        } else if (e.key === 'Escape') {
+            setEditingCycle(prev => ({...prev, name: cycle.name }));
+            setIsEditingName(false);
+        }
+    };
 
     const handleMapsInfoChange = (id: UUID, field: keyof Omit<CycleMapInfo, 'id'>, value: string) => {
         const newMapsInfo = (editingCycle.mapsInfo || []).map(info => 
@@ -941,7 +956,7 @@ const CycleBuilder: React.FC<{
 
     return (
         <div className="flex h-full overflow-hidden">
-             {permissions.canEditCycles && isAddTestModalOpen && (
+             {permissions.canEditCycles && isAddTestModalOpen && !isArchived && (
                 <AddTestsModal 
                     onClose={() => setIsAddTestModalOpen(false)} 
                     onAddTests={handleAddTests}
@@ -992,7 +1007,30 @@ const CycleBuilder: React.FC<{
                             <button onClick={onBack} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-2">
                                 <ChevronLeftIcon className="w-6 h-6" />
                             </button>
-                            <h1 className="text-2xl font-bold truncate" title={cycle.name}>{cycle.name}</h1>
+                             {isEditingName && !isArchived ? (
+                                <input
+                                    type="text"
+                                    value={editingCycle.name}
+                                    onChange={(e) => setEditingCycle(prev => ({ ...prev, name: e.target.value }))}
+                                    onBlur={() => setIsEditingName(false)}
+                                    onKeyDown={handleNameKeyDown}
+                                    className="text-2xl font-bold bg-white dark:bg-gray-800 border-b-2 border-blue-accent focus:outline-none"
+                                    autoFocus
+                                />
+                            ) : (
+                                <div className="flex items-center group">
+                                    <h1 className="text-2xl font-bold truncate" title={editingCycle.name}>{editingCycle.name}</h1>
+                                    {permissions.canEditCycles && !isArchived && (
+                                        <button
+                                            onClick={() => setIsEditingName(true)}
+                                            className="ml-2 p-1 rounded-full text-gray-500 dark:text-gray-400 opacity-0 group-hover:opacity-100 hover:bg-gray-200 dark:hover:bg-gray-700 focus:opacity-100"
+                                            title="Edit cycle name"
+                                        >
+                                            <EditIcon className="w-5 h-5" />
+                                        </button>
+                                    )}
+                                </div>
+                            )}
                             <div className="ml-4 flex items-center gap-2">
                                 <CycleStatusBadge status={editingCycle.status} />
                                 <button onClick={() => setEditingNoteTarget({ id: cycle.id, type: 'cycle', name: `Notes for cycle: ${cycle.name}`})} title="Cycle Notes" className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
@@ -1017,6 +1055,15 @@ const CycleBuilder: React.FC<{
                         </div>
                     </div>
                 </header>
+
+                 {isArchived && (
+                     <div className="relative flex-shrink-0 mb-4 p-4 rounded-lg bg-yellow-100 dark:bg-yellow-900/50 border border-yellow-200 dark:border-yellow-800/70 text-yellow-800 dark:text-yellow-200">
+                        <div className="flex">
+                            <AlertTriangleIcon className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" />
+                            <p>This cycle is archived and is in read-only mode. No changes can be made.</p>
+                        </div>
+                    </div>
+                )}
 
                 {pinnedNote && isPinnedNoteVisible && (
                     <div className="relative flex-shrink-0 mb-4 p-4 rounded-lg bg-blue-100 dark:bg-blue-900/50 border border-blue-200 dark:border-blue-800/70 text-blue-800 dark:text-blue-200">
@@ -1045,7 +1092,7 @@ const CycleBuilder: React.FC<{
                             </span>
                         </summary>
                         <div className="p-4 pt-0">
-                            <fieldset disabled={!permissions.canEditCycles} className="disabled:opacity-70">
+                            <fieldset disabled={!permissions.canEditCycles || isArchived} className="disabled:opacity-70">
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Description</label>
@@ -1088,7 +1135,7 @@ const CycleBuilder: React.FC<{
                             <div className="flex items-center">
                                 <ChevronRightIcon className="w-5 h-5 mr-2 transition-transform duration-200 group-open:rotate-90" />
                                 <span>Maps and Tools</span>
-                                {permissions.canEditCycles && (
+                                {permissions.canEditCycles && !isArchived && (
                                     <button 
                                         onClick={(e) => {
                                             e.preventDefault();
@@ -1105,7 +1152,7 @@ const CycleBuilder: React.FC<{
                             </span>
                         </summary>
                         <div className="p-4 pt-0">
-                            <fieldset disabled={!permissions.canEditCycles} className="disabled:opacity-70">
+                            <fieldset disabled={!permissions.canEditCycles || isArchived} className="disabled:opacity-70">
                                 <div className="mt-4 overflow-x-auto">
                                     <table className="w-full text-sm text-left border-collapse">
                                         <thead className="border-b border-gray-300 dark:border-gray-600">
@@ -1147,11 +1194,11 @@ const CycleBuilder: React.FC<{
                                         </tbody>
                                     </table>
                                 </div>
-                                {permissions.canEditCycles && <button onClick={addMapInfo} className="text-sm text-blue-500 hover:underline mt-3 flex items-center"><PlusIcon className="w-4 h-4 mr-1"/>Add Map</button>}
+                                {permissions.canEditCycles && !isArchived && <button onClick={addMapInfo} className="text-sm text-blue-500 hover:underline mt-3 flex items-center"><PlusIcon className="w-4 h-4 mr-1"/>Add Map</button>}
                             </fieldset>
                         </div>
                     </details>
-                    {permissions.canEditCycles && (
+                    {permissions.canEditCycles && !isArchived && (
                         <div className="flex justify-end">
                             <button onClick={handleSaveDetails} className="flex items-center bg-blue-accent text-white px-4 py-1.5 rounded-md hover:bg-blue-600 transition-colors text-sm">
                                 <SaveIcon className="w-4 h-4 mr-2"/>
@@ -1169,19 +1216,19 @@ const CycleBuilder: React.FC<{
                                     value={scope.name}
                                     onChange={(e) => handleUpdateScope(scope.id, { name: e.target.value as ScopeName })}
                                     onClick={(e) => e.stopPropagation()}
-                                    disabled={!permissions.canEditCycles}
+                                    disabled={!permissions.canEditCycles || isArchived}
                                     className={`bg-transparent font-medium text-sm focus:outline-none appearance-none cursor-pointer ${selectedScopeId === scope.id ? 'text-blue-accent' : 'text-gray-500 group-hover:text-gray-700 dark:group-hover:text-gray-200'} disabled:text-gray-400 dark:disabled:text-gray-500 disabled:cursor-not-allowed`}
                                 >
                                     {Object.values(ScopeName).map(name => <option key={name} value={name}>{name}</option>)}
                                 </select>
-                                {permissions.canEditCycles && cycleScopes.length > 1 && (
+                                {permissions.canEditCycles && cycleScopes.length > 1 && !isArchived && (
                                     <button onClick={(e) => { e.stopPropagation(); handleDeleteScope(scope.id); }} className="ml-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Delete Scope">
                                         <TrashIcon className="w-3 h-3"/>
                                     </button>
                                 )}
                             </div>
                         ))}
-                        {permissions.canEditCycles && (
+                        {permissions.canEditCycles && !isArchived && (
                             <button onClick={handleAddScope} className="flex items-center text-sm text-blue-500 hover:underline py-3 px-1">
                                 <PlusIcon className="w-4 h-4 mr-1" /> Add Scope
                             </button>
@@ -1202,7 +1249,7 @@ const CycleBuilder: React.FC<{
                                 <option value="affectedObjectType">Affected Object Type</option>
                             </select>
                         </div>
-                        {permissions.canRunTests && selectedItemIds.size > 0 && (
+                        {permissions.canRunTests && selectedItemIds.size > 0 && !isArchived && (
                             <div className="flex items-center gap-1 border border-gray-300 dark:border-gray-600 rounded-md p-0.5">
                                 <button onClick={() => setIsBulkEditModalOpen(true)} className="px-3 py-1 text-sm rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">
                                 Bulk Edit ({selectedItemIds.size})
@@ -1229,7 +1276,7 @@ const CycleBuilder: React.FC<{
                             </div>
                         )}
                     </div>
-                    {permissions.canEditCycles && (
+                    {permissions.canEditCycles && !isArchived && (
                         <button onClick={() => setIsAddTestModalOpen(true)} className="flex items-center bg-blue-accent text-white px-4 py-1.5 rounded-md hover:bg-blue-600 transition-colors text-sm">
                             <PlusIcon className="w-4 h-4 mr-2" /> Add Tests from Library
                         </button>
@@ -1342,14 +1389,14 @@ const CycleBuilder: React.FC<{
                                             </td>
                                         </tr>
                                         {items.map(item => (
-                                            <CycleTestRow key={item.id} item={item} allUsers={allUsers} maps={maps} configurations={configurations} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onDuplicateItem={handleDuplicateItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} permissions={permissions} onOpenNote={() => setEditingNoteTarget({id: item.id, type: 'item', name: `Notes for test: ${item.testSnapshot.name}`})} hasNote={notesMap.has(item.id)} />
+                                            <CycleTestRow key={item.id} item={item} allUsers={allUsers} maps={maps} configurations={configurations} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onDuplicateItem={handleDuplicateItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} permissions={permissions} onOpenNote={() => setEditingNoteTarget({id: item.id, type: 'item', name: `Notes for test: ${item.testSnapshot.name}`})} hasNote={notesMap.has(item.id)} isArchived={isArchived} />
                                         ))}
                                     </React.Fragment>
                                 )
                             })
                             ) : (
                                 filteredItems.map(item => (
-                                    <CycleTestRow key={item.id} item={item} allUsers={allUsers} maps={maps} configurations={configurations} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onDuplicateItem={handleDuplicateItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} permissions={permissions} onOpenNote={() => setEditingNoteTarget({id: item.id, type: 'item', name: `Notes for test: ${item.testSnapshot.name}`})} hasNote={notesMap.has(item.id)} />
+                                    <CycleTestRow key={item.id} item={item} allUsers={allUsers} maps={maps} configurations={configurations} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onDuplicateItem={handleDuplicateItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} permissions={permissions} onOpenNote={() => setEditingNoteTarget({id: item.id, type: 'item', name: `Notes for test: ${item.testSnapshot.name}`})} hasNote={notesMap.has(item.id)} isArchived={isArchived} />
                                 ))
                             )}
                             {filteredItems.length === 0 && (
@@ -1376,7 +1423,8 @@ const CycleTestRow: React.FC<{
     permissions: Permissions;
     onOpenNote: () => void;
     hasNote: boolean;
-}> = ({ item, allUsers, maps, configurations, onUpdateItem, onRemoveItem, onDuplicateItem, onSelectItem, isSelected, permissions, onOpenNote, hasNote }) => (
+    isArchived: boolean;
+}> = ({ item, allUsers, maps, configurations, onUpdateItem, onRemoveItem, onDuplicateItem, onSelectItem, isSelected, permissions, onOpenNote, hasNote, isArchived }) => (
     <tr className={isSelected ? 'bg-blue-accent/20' : 'hover:bg-gray-100/50 dark:hover:bg-gray-800/50'}>
         <td className="p-2"><input type="checkbox" checked={isSelected} onChange={(e) => onSelectItem(item.id, e)} className="h-4 w-4 bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-600 rounded text-blue-accent focus:ring-blue-accent"/></td>
         <td className="p-2 font-medium text-sm text-gray-900 dark:text-gray-100">{item.testSnapshot.name}</td>
@@ -1384,14 +1432,14 @@ const CycleTestRow: React.FC<{
             <select
                 value={item.assigneeId || ''}
                 onChange={e => onUpdateItem(item.id, { assigneeId: e.target.value || null })}
-                disabled={!permissions.canRunTests}
+                disabled={!permissions.canRunTests || isArchived}
                 className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm focus:ring-blue-accent focus:border-blue-accent disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
             >
                 {allUsers.map(user => <option key={user.id} value={user.id}>{user.displayName}</option>)}
             </select>
         </td>
         <td className="p-1">
-            <fieldset disabled={!permissions.canRunTests} className="disabled:opacity-70">
+            <fieldset disabled={!permissions.canRunTests || isArchived} className="disabled:opacity-70">
                 <EditableDatalistInput
                     value={item.map}
                     onChange={value => onUpdateItem(item.id, { map: value })}
@@ -1405,14 +1453,14 @@ const CycleTestRow: React.FC<{
                 options={configurations}
                 selected={item.configurations}
                 onChange={selected => onUpdateItem(item.id, { configurations: selected })}
-                disabled={!permissions.canRunTests}
+                disabled={!permissions.canRunTests || isArchived}
              />
         </td>
         <td className="p-2">
             <select
                 value={item.result}
                 onChange={e => onUpdateItem(item.id, { result: e.target.value as CycleItemResult })}
-                disabled={!permissions.canRunTests}
+                disabled={!permissions.canRunTests || isArchived}
                 className={`w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm focus:ring-blue-accent focus:border-blue-accent disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed ${getResultColorClass(item.result)}`}
             >
                 {Object.values(CycleItemResult).map(r => <option key={r} value={r} className="text-gray-900 dark:text-gray-100 capitalize">{r.replace(/_/g, ' ')}</option>)}
@@ -1423,7 +1471,7 @@ const CycleTestRow: React.FC<{
                 <button onClick={onOpenNote} title="Notes for this test" className="text-gray-400 hover:text-blue-500">
                     <NoteIcon className="w-4 h-4" filled={hasNote} />
                 </button>
-                {permissions.canEditCycles ? (
+                {permissions.canEditCycles && !isArchived ? (
                     <>
                         <button onClick={() => onDuplicateItem(item.id)} title="Duplicate test in cycle" className="text-gray-400 hover:text-blue-500">
                             <CopyIcon className="w-4 h-4" />

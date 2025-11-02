@@ -18,6 +18,7 @@ export enum CycleStatus {
   DRAFT = 'draft',
   ACTIVE = 'active',
   CLOSED = 'closed',
+  ARCHIVED = 'archived',
 }
 
 export enum CycleItemResult {

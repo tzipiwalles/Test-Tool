@@ -1,9 +1,58 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Cycle, CycleItem, CycleItemResult, CycleStatus, Scope, ScopeName } from '../types';
 import CycleBuilder from './CycleBuilder';
 import { PlusIcon } from './icons/PlusIcon';
 import { useData } from './DataContext';
 import { CopyIcon } from './icons/CopyIcon';
+import { TrashIcon } from './icons/TrashIcon';
+import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
+
+const ConfirmationModal: React.FC<{
+  title: string;
+  message: React.ReactNode;
+  onConfirm: () => void;
+  onCancel: () => void;
+  confirmText?: string;
+  confirmButtonClass?: string;
+}> = ({ title, message, onConfirm, onCancel, confirmText = 'Confirm', confirmButtonClass = 'bg-blue-accent hover:bg-blue-600' }) => {
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 animate-fade-in-down" style={{animationDuration: '0.2s'}} onMouseDown={onCancel}>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md text-gray-900 dark:text-white" onMouseDown={e => e.stopPropagation()}>
+        <div className="flex items-start">
+            <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/50 sm:mx-0 sm:h-10 sm:w-10">
+                <AlertTriangleIcon className="h-6 w-6 text-red-600 dark:text-red-400" aria-hidden="true" />
+            </div>
+            <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                <h3 className="text-lg leading-6 font-bold" id="modal-title">
+                    {title}
+                </h3>
+                <div className="mt-2">
+                    <div className="text-sm text-gray-600 dark:text-gray-300">
+                        {message}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+          <button
+            type="button"
+            onClick={onConfirm}
+            className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white sm:ml-3 sm:w-auto sm:text-sm ${confirmButtonClass}`}
+          >
+            {confirmText}
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-500 shadow-sm px-4 py-2 bg-white dark:bg-gray-700 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-accent sm:mt-0 sm:w-auto sm:text-sm"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const NewCycleModal: React.FC<{ onClose: () => void; onCreate: (data: { name: string; description: string; labels: string }) => void; }> = ({ onClose, onCreate }) => {
     const [name, setName] = useState('');
@@ -47,6 +96,7 @@ const CycleStatusBadge: React.FC<{ status: CycleStatus }> = ({ status }) => {
     [CycleStatus.DRAFT]: 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-100',
     [CycleStatus.ACTIVE]: 'bg-blue-500 text-white',
     [CycleStatus.CLOSED]: 'bg-green-600 text-white',
+    [CycleStatus.ARCHIVED]: 'bg-gray-500 text-white',
   };
   return (
     <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusStyles[status]}`}>
@@ -85,6 +135,8 @@ const CyclesView: React.FC = () => {
   const { cycles, setCycles, cycleItems, setCycleItems, scopes, setScopes, permissions } = useData();
   const [selectedCycle, setSelectedCycle] = useState<Cycle | null>(null);
   const [isNewCycleModalOpen, setIsNewCycleModalOpen] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [archivingCycle, setArchivingCycle] = useState<Cycle | null>(null);
 
   const handleCreateCycle = (cycleData: { name: string; description: string; labels: string }) => {
     const newCycle: Cycle = {
@@ -176,6 +228,18 @@ const CyclesView: React.FC = () => {
     setCycleItems(prev => [...prev, ...newCycleItems]);
   };
 
+  const handleArchiveCycle = () => {
+    if (!archivingCycle) return;
+    setCycles(prev => prev.map(c => c.id === archivingCycle.id ? { ...c, status: CycleStatus.ARCHIVED } : c));
+    setArchivingCycle(null);
+  };
+
+  const filteredCycles = useMemo(() => {
+    return cycles
+        .filter(cycle => showArchived ? true : cycle.status !== CycleStatus.ARCHIVED)
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  }, [cycles, showArchived]);
+
   if (selectedCycle) {
     return (
       <CycleBuilder 
@@ -189,17 +253,38 @@ const CyclesView: React.FC = () => {
   return (
     <div className="p-6 h-full flex flex-col">
       {isNewCycleModalOpen && <NewCycleModal onClose={() => setIsNewCycleModalOpen(false)} onCreate={handleCreateCycle} />}
+      {archivingCycle && (
+        <ConfirmationModal
+            title="Archive Cycle"
+            message={<p>Are you sure you want to archive the cycle "<strong>{archivingCycle.name}</strong>"? It can be viewed later by enabling 'Show Archived'.</p>}
+            onConfirm={handleArchiveCycle}
+            onCancel={() => setArchivingCycle(null)}
+            confirmText="Archive"
+            confirmButtonClass="bg-red-600 hover:bg-red-700"
+        />
+      )}
       <header className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">Test Cycles</h1>
-        {permissions.canCreateCycles && (
-            <button 
-            onClick={() => setIsNewCycleModalOpen(true)}
-            className="flex items-center bg-blue-accent text-white px-4 py-1.5 rounded-md hover:bg-blue-600 transition-colors"
-            >
-            <PlusIcon className="w-5 h-5 mr-2" />
-            New Cycle
-            </button>
-        )}
+        <div className="flex items-center space-x-4">
+            <label className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300">
+                <input 
+                    type="checkbox"
+                    checked={showArchived}
+                    onChange={(e) => setShowArchived(e.target.checked)}
+                    className="h-4 w-4 bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-600 rounded text-blue-accent focus:ring-blue-accent"
+                />
+                <span>Show Archived</span>
+            </label>
+            {permissions.canCreateCycles && (
+                <button 
+                onClick={() => setIsNewCycleModalOpen(true)}
+                className="flex items-center bg-blue-accent text-white px-4 py-1.5 rounded-md hover:bg-blue-600 transition-colors"
+                >
+                <PlusIcon className="w-5 h-5 mr-2" />
+                New Cycle
+                </button>
+            )}
+        </div>
       </header>
       <div className="flex-1 overflow-y-auto">
         <table className="w-full text-left">
@@ -213,10 +298,10 @@ const CyclesView: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-            {cycles.map(cycle => (
+            {filteredCycles.map(cycle => (
               <tr 
                 key={cycle.id} 
-                className="hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
+                className={`hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer ${cycle.status === CycleStatus.ARCHIVED ? 'opacity-60' : ''}`}
                 onClick={() => setSelectedCycle(cycle)}
               >
                 <td className="p-3 font-medium">{cycle.name}</td>
@@ -224,18 +309,32 @@ const CyclesView: React.FC = () => {
                 <td className="p-3 w-1/3"><CycleProgress items={cycleItems.filter(item => item.cycleId === cycle.id)} /></td>
                 <td className="p-3 text-gray-500 dark:text-gray-400">{cycle.updatedAt}</td>
                 <td className="p-3 text-right">
-                    {permissions.canCreateCycles && (
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handleDuplicateCycle(cycle);
-                            }}
-                            title="Duplicate Cycle"
-                            className="p-1.5 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white"
-                        >
-                            <CopyIcon className="w-5 h-5" />
-                        </button>
-                    )}
+                    <div className="flex items-center justify-end space-x-1">
+                        {permissions.canCreateCycles && cycle.status !== CycleStatus.ARCHIVED && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDuplicateCycle(cycle);
+                                }}
+                                title="Duplicate Cycle"
+                                className="p-1.5 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white"
+                            >
+                                <CopyIcon className="w-5 h-5" />
+                            </button>
+                        )}
+                        {permissions.canEditCycles && cycle.status !== CycleStatus.ARCHIVED && (
+                             <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setArchivingCycle(cycle);
+                                }}
+                                title="Archive Cycle"
+                                className="p-1.5 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-red-500 dark:hover:text-red-400"
+                            >
+                                <TrashIcon className="w-5 h-5" />
+                            </button>
+                        )}
+                    </div>
                 </td>
               </tr>
             ))}
