@@ -22,6 +22,7 @@ import { ReviewIcon } from './icons/ReviewIcon';
 import { BuilderIcon } from './icons/BuilderIcon';
 import { PinIcon } from './icons/PinIcon';
 import { PlayIcon } from './icons/PlayIcon';
+import { CopyIcon } from './icons/CopyIcon';
 
 const MultiSelectPills: React.FC<{
   options: string[];
@@ -743,6 +744,28 @@ const CycleBuilder: React.FC<{
         setCycleItems(prev => prev.filter(item => item.id !== itemId));
     };
 
+    const handleDuplicateItem = (itemIdToDuplicate: string) => {
+        setCycleItems(prev => {
+            const items = [...prev];
+            const originalItemIndex = items.findIndex(item => item.id === itemIdToDuplicate);
+            if (originalItemIndex === -1) {
+                return items; // item not found
+            }
+
+            const originalItem = items[originalItemIndex];
+            const newItem: CycleItem = {
+                ...originalItem,
+                id: `ci-${Date.now()}-${originalItem.testId}-${Math.random().toString(36).substring(2, 9)}`,
+                result: CycleItemResult.NOT_RUN,
+                assigneeId: null,
+                updatedAt: new Date().toLocaleDateString(),
+            };
+
+            items.splice(originalItemIndex + 1, 0, newItem);
+            return items;
+        });
+    };
+
     const handleSaveNote = (noteContent: string, isPinned: boolean) => {
         if (!editingNoteTarget || !currentUser) return;
 
@@ -1319,14 +1342,14 @@ const CycleBuilder: React.FC<{
                                             </td>
                                         </tr>
                                         {items.map(item => (
-                                            <CycleTestRow key={item.id} item={item} allUsers={allUsers} maps={maps} configurations={configurations} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} permissions={permissions} onOpenNote={() => setEditingNoteTarget({id: item.id, type: 'item', name: `Notes for test: ${item.testSnapshot.name}`})} hasNote={notesMap.has(item.id)} />
+                                            <CycleTestRow key={item.id} item={item} allUsers={allUsers} maps={maps} configurations={configurations} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onDuplicateItem={handleDuplicateItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} permissions={permissions} onOpenNote={() => setEditingNoteTarget({id: item.id, type: 'item', name: `Notes for test: ${item.testSnapshot.name}`})} hasNote={notesMap.has(item.id)} />
                                         ))}
                                     </React.Fragment>
                                 )
                             })
                             ) : (
                                 filteredItems.map(item => (
-                                    <CycleTestRow key={item.id} item={item} allUsers={allUsers} maps={maps} configurations={configurations} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} permissions={permissions} onOpenNote={() => setEditingNoteTarget({id: item.id, type: 'item', name: `Notes for test: ${item.testSnapshot.name}`})} hasNote={notesMap.has(item.id)} />
+                                    <CycleTestRow key={item.id} item={item} allUsers={allUsers} maps={maps} configurations={configurations} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onDuplicateItem={handleDuplicateItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} permissions={permissions} onOpenNote={() => setEditingNoteTarget({id: item.id, type: 'item', name: `Notes for test: ${item.testSnapshot.name}`})} hasNote={notesMap.has(item.id)} />
                                 ))
                             )}
                             {filteredItems.length === 0 && (
@@ -1347,12 +1370,13 @@ const CycleTestRow: React.FC<{
     configurations: string[];
     onUpdateItem: (id: string, updates: Partial<CycleItem>) => void;
     onRemoveItem: (id: string) => void;
+    onDuplicateItem: (id: string) => void;
     onSelectItem: (id: string, event: React.ChangeEvent<HTMLInputElement>) => void;
     isSelected: boolean;
     permissions: Permissions;
     onOpenNote: () => void;
     hasNote: boolean;
-}> = ({ item, allUsers, maps, configurations, onUpdateItem, onRemoveItem, onSelectItem, isSelected, permissions, onOpenNote, hasNote }) => (
+}> = ({ item, allUsers, maps, configurations, onUpdateItem, onRemoveItem, onDuplicateItem, onSelectItem, isSelected, permissions, onOpenNote, hasNote }) => (
     <tr className={isSelected ? 'bg-blue-accent/20' : 'hover:bg-gray-100/50 dark:hover:bg-gray-800/50'}>
         <td className="p-2"><input type="checkbox" checked={isSelected} onChange={(e) => onSelectItem(item.id, e)} className="h-4 w-4 bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-600 rounded text-blue-accent focus:ring-blue-accent"/></td>
         <td className="p-2 font-medium text-sm text-gray-900 dark:text-gray-100">{item.testSnapshot.name}</td>
@@ -1400,9 +1424,14 @@ const CycleTestRow: React.FC<{
                     <NoteIcon className="w-4 h-4" filled={hasNote} />
                 </button>
                 {permissions.canEditCycles ? (
-                    <button onClick={() => onRemoveItem(item.id)} title="Remove test from cycle" className="text-gray-400 hover:text-red-500">
-                        <TrashIcon className="w-4 h-4" />
-                    </button>
+                    <>
+                        <button onClick={() => onDuplicateItem(item.id)} title="Duplicate test in cycle" className="text-gray-400 hover:text-blue-500">
+                            <CopyIcon className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => onRemoveItem(item.id)} title="Remove test from cycle" className="text-gray-400 hover:text-red-500">
+                            <TrashIcon className="w-4 h-4" />
+                        </button>
+                    </>
                 ) : <div className="w-4 h-4" /> }
             </div>
         </td>

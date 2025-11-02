@@ -6,6 +6,7 @@ import { ArchiveIcon } from './icons/ArchiveIcon';
 import { EditIcon } from './icons/EditIcon';
 import { ChevronRightIcon } from './icons/ChevronRightIcon';
 import { TestDetailView } from './TestDetailView';
+import { CopyIcon } from './icons/CopyIcon';
 
 const PriorityBadge: React.FC<{ priority: Priority }> = ({ priority }) => {
     const styles = {
@@ -21,13 +22,14 @@ interface TestListProps {
   tests: Test[];
   onEdit: (test: Test) => void;
   onArchive: (test: Test) => void;
+  onDuplicate: (test: Test) => void;
   selectedTestIds: Set<string>;
   onSelectTest: (testId: string) => void;
   onSelectAllTests: () => void;
   canEdit: boolean;
 }
 
-const TestList: React.FC<TestListProps> = ({ tests, onEdit, onArchive, selectedTestIds, onSelectTest, onSelectAllTests, canEdit }) => {
+const TestList: React.FC<TestListProps> = ({ tests, onEdit, onArchive, onDuplicate, selectedTestIds, onSelectTest, onSelectAllTests, canEdit }) => {
   const [expandedTestId, setExpandedTestId] = useState<string | null>(null);
 
   const handleDragStart = (e: React.DragEvent, testId: string) => {
@@ -111,6 +113,7 @@ const TestList: React.FC<TestListProps> = ({ tests, onEdit, onArchive, selectedT
                                 {canEdit ? (
                                     <>
                                         <button onClick={() => onEdit(test)} title="Edit Test" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"><EditIcon className="w-4 h-4" /></button>
+                                        <button onClick={() => onDuplicate(test)} title="Duplicate Test" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"><CopyIcon className="w-4 h-4" /></button>
                                         {test.status !== TestStatus.ARCHIVED &&
                                         <button onClick={() => onArchive(test)} title="Archive Test" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"><ArchiveIcon className="w-4 h-4" /></button>
                                         }

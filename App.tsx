@@ -8,17 +8,23 @@ import { useData } from './components/DataContext';
 import { SunIcon } from './components/icons/SunIcon';
 import { MoonIcon } from './components/icons/MoonIcon';
 import Header from './components/Header';
+import TestPlanReviewView from './components/TestPlanReviewView';
 
 type View = 'library' | 'cycles';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('library');
+  const [reviewingTestIds, setReviewingTestIds] = useState<string[] | null>(null);
   const { theme, toggleTheme } = useData();
 
   const navItems = [
     { id: 'library', label: 'Test Library', icon: <ArchiveIcon /> },
     { id: 'cycles', label: 'Test Cycles', icon: <PlayIcon /> },
   ];
+
+  if (reviewingTestIds) {
+    return <TestPlanReviewView testIds={reviewingTestIds} onEndReview={() => setReviewingTestIds(null)} />;
+  }
 
   return (
     <div className="flex flex-col h-screen w-full bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-200 font-sans">
@@ -56,7 +62,7 @@ const App: React.FC = () => {
         </nav>
 
         <main className="flex-1 flex flex-col overflow-hidden">
-          {currentView === 'library' && <TestLibraryView />}
+          {currentView === 'library' && <TestLibraryView onStartReview={setReviewingTestIds} />}
           {currentView === 'cycles' && <CyclesView />}
         </main>
       </div>

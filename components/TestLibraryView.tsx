@@ -11,6 +11,7 @@ import { ExpandAllIcon } from './icons/ExpandAllIcon';
 import { CollapseAllIcon } from './icons/CollapseAllIcon';
 import { DownloadIcon } from './icons/DownloadIcon';
 import { UploadIcon } from './icons/UploadIcon';
+import { ReviewIcon } from './icons/ReviewIcon';
 
 // A generic Modal component for reuse within this view
 const Modal: React.FC<{ children: React.ReactNode; onClose: () => void; title: string }> = ({ children, onClose, title }) => (
@@ -34,7 +35,7 @@ const TestEditorModal: React.FC<{
         if (test && test.id) { // Editing an existing test
             return test;
         }
-        // Creating a new test, provide a default structure
+        // Creating a new test or duplicating, provide a default structure or passed in data
         return { 
             name: '', 
             description: '', 
@@ -46,6 +47,7 @@ const TestEditorModal: React.FC<{
             affectedObjectType: '',
             testMethod: '',
             estimated_duration_sec: 60,
+            ...test, // This will override defaults if duplicating
         };
     });
     
@@ -264,7 +266,7 @@ const ImportStatusModal: React.FC<{ status: { message: string, error?: boolean }
   </Modal>
 );
 
-const TestLibraryView: React.FC = () => {
+const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> = ({ onStartReview }) => {
   const { folders, tests, setFolders, setTests, permissions, currentUser } = useData();
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(folders[0]?.id || null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -421,6 +423,15 @@ const TestLibraryView: React.FC = () => {
    const handleArchiveTest = (test: Test) => {
       setTests(prev => prev.map(t => t.id === test.id ? {...t, status: TestStatus.ARCHIVED} : t));
       setArchivingTest(null);
+  };
+
+  const handleDuplicateTest = (testToDuplicate: Test) => {
+    const { id, ...testData } = testToDuplicate;
+    const newTestForModal: Partial<Test> = {
+      ...testData,
+      name: '', // Set name to empty as requested, user will fill it in the modal.
+    };
+    setEditingTest(newTestForModal);
   };
 
   const handleSelectTest = (testId: string) => {
@@ -805,46 +816,60 @@ const TestLibraryView: React.FC = () => {
                         <span>Show Archived</span>
                     </label>
                 </div>
-                {permissions.canEditLibrary && (
-                    <div className="flex items-center space-x-2">
-                        {selectedTestIds.size > 0 && (
+                <div className="flex items-center space-x-2">
+                    {selectedTestIds.size > 0 && (
+                        <>
                             <button 
-                                onClick={() => setIsBulkEditModalOpen(true)}
-                                className="px-3 py-1.5 text-sm rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
+                                onClick={() => onStartReview(Array.from(selectedTestIds))}
+                                className="flex items-center text-sm px-3 py-1.5 rounded-md bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800/50"
                             >
-                                Bulk Edit ({selectedTestIds.size})
+                                <ReviewIcon className="w-4 h-4 mr-2" />
+                                Review ({selectedTestIds.size})
                             </button>
-                        )}
-                         <button 
-                            onClick={handleImportClick}
-                            title="Import tests from a CSV file"
-                            className="flex items-center text-sm px-3 py-1.5 rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
-                        >
-                            <UploadIcon className="w-4 h-4 mr-2" />
-                            Import
-                        </button>
-                        <button 
-                            onClick={handleExportCSV}
-                            title="Export all tests to a CSV file"
-                            className="flex items-center text-sm px-3 py-1.5 rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
-                        >
-                            <DownloadIcon className="w-4 h-4 mr-2" />
-                            Export
-                        </button>
-                        <button 
-                            onClick={() => setEditingTest({})}
-                            className="flex items-center bg-blue-accent text-white px-4 py-1.5 rounded-md hover:bg-blue-600 transition-colors"
-                        >
-                            <PlusIcon className="w-5 h-5 mr-2" />
-                            New Test
-                        </button>
-                    </div>
-                )}
+                            {permissions.canEditLibrary && (
+                                <button 
+                                    onClick={() => setIsBulkEditModalOpen(true)}
+                                    className="px-3 py-1.5 text-sm rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
+                                >
+                                    Bulk Edit ({selectedTestIds.size})
+                                </button>
+                            )}
+                        </>
+                    )}
+                    {permissions.canEditLibrary && (
+                        <>
+                            <button 
+                                onClick={handleImportClick}
+                                title="Import tests from a CSV file"
+                                className="flex items-center text-sm px-3 py-1.5 rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
+                            >
+                                <UploadIcon className="w-4 h-4 mr-2" />
+                                Import
+                            </button>
+                            <button 
+                                onClick={handleExportCSV}
+                                title="Export all tests to a CSV file"
+                                className="flex items-center text-sm px-3 py-1.5 rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
+                            >
+                                <DownloadIcon className="w-4 h-4 mr-2" />
+                                Export
+                            </button>
+                            <button 
+                                onClick={() => setEditingTest({})}
+                                className="flex items-center bg-blue-accent text-white px-4 py-1.5 rounded-md hover:bg-blue-600 transition-colors"
+                            >
+                                <PlusIcon className="w-5 h-5 mr-2" />
+                                New Test
+                            </button>
+                        </>
+                    )}
+                </div>
             </header>
             <TestList 
                 tests={filteredTests}
                 onEdit={setEditingTest}
                 onArchive={handleArchiveTest}
+                onDuplicate={handleDuplicateTest}
                 selectedTestIds={selectedTestIds}
                 onSelectTest={handleSelectTest}
                 onSelectAllTests={handleSelectAllTests}

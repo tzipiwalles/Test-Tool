@@ -4,9 +4,14 @@ import { Folder, Test, Cycle, CycleItem, User, TestStatus, Priority, CycleStatus
 export const mockUsers: User[] = [
   { id: 'u-1', displayName: 'Tzipi W', email: 'tzipi.w@example.com', role: UserRole.MAINTAINER },
   { id: 'u-2', displayName: 'Michelle H', email: 'michelleh@example.com', role: UserRole.VALIDATION_LEAD },
-  { id: 'u-3', displayName: 'Halima A', email: 'halimaa@example.com', role: UserRole.ANALYST },
-  { id: 'u-4', displayName: 'Yogev M', email: 'yogevm@example.com', role: UserRole.ANALYST },
+  { id: 'u-3', displayName: 'Halima A', email: 'halimaa@example.com', role: UserRole.VALIDATION_LEAD },
+  { id: 'u-4', displayName: 'Racheli N', email: 'rachelin@example.com', role: UserRole.ANALYST },
   { id: 'u-5', displayName: 'Dana M', email: 'danam@example.com', role: UserRole.VIEWER },
+  { id: 'u-6', displayName: 'Yael R', email: 'yaelr@example.com', role: UserRole.ANALYST },
+  { id: 'u-7', displayName: 'Tal A', email: 'tal.a@example.com', role: UserRole.MAINTAINER },
+  { id: 'u-8', displayName: 'Tamar B', email: 'tamarb@example.com', role: UserRole.ANALYST },
+  { id: 'u-9', displayName: 'Alex N', email: 'Alexn@example.com', role: UserRole.ANALYST },
+
 ];
 
 

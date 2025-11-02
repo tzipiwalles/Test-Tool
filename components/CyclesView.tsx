@@ -1,9 +1,9 @@
-
 import React, { useState } from 'react';
 import { Cycle, CycleItem, CycleItemResult, CycleStatus, Scope, ScopeName } from '../types';
 import CycleBuilder from './CycleBuilder';
 import { PlusIcon } from './icons/PlusIcon';
 import { useData } from './DataContext';
+import { CopyIcon } from './icons/CopyIcon';
 
 const NewCycleModal: React.FC<{ onClose: () => void; onCreate: (data: { name: string; description: string; labels: string }) => void; }> = ({ onClose, onCreate }) => {
     const [name, setName] = useState('');
@@ -82,7 +82,7 @@ const CycleProgress: React.FC<{ items: CycleItem[] }> = ({ items }) => {
 
 
 const CyclesView: React.FC = () => {
-  const { cycles, setCycles, cycleItems, setScopes, permissions } = useData();
+  const { cycles, setCycles, cycleItems, setCycleItems, scopes, setScopes, permissions } = useData();
   const [selectedCycle, setSelectedCycle] = useState<Cycle | null>(null);
   const [isNewCycleModalOpen, setIsNewCycleModalOpen] = useState(false);
 
@@ -110,6 +110,70 @@ const CyclesView: React.FC = () => {
   const handleUpdateCycle = (updatedCycle: Cycle) => {
     setCycles(prev => prev.map(c => c.id === updatedCycle.id ? updatedCycle : c));
     setSelectedCycle(updatedCycle);
+  };
+
+  const handleDuplicateCycle = (cycleToDuplicate: Cycle) => {
+    // 1. Create the new cycle
+    const newCycle: Cycle = {
+        ...cycleToDuplicate,
+        id: `c-${Date.now()}`,
+        name: `Copy of ${cycleToDuplicate.name}`,
+        status: CycleStatus.DRAFT,
+        version: '', // Clear version
+        refVersion: '', // Clear ref version
+        updatedAt: new Date().toLocaleDateString(),
+        mapsInfo: (cycleToDuplicate.mapsInfo || []).map(info => ({
+            id: `mi-${Date.now()}-${Math.random().toString(36).substring(2,9)}`,
+            mapName: info.mapName, // Keep map name
+            // Clear all other fields as requested
+            mainMapLink: undefined,
+            refMapLink: undefined,
+            mainSA: undefined,
+            refSA: undefined,
+            v2vMapsLink: undefined,
+            v2vProbes: undefined,
+            gtProbes: undefined,
+            comment: undefined,
+        })),
+    };
+
+    // 2. Duplicate scopes
+    const oldScopes = scopes.filter(s => s.cycleId === cycleToDuplicate.id);
+    const oldToNewScopeIdMap = new Map<string, string>();
+    const newScopes: Scope[] = oldScopes.map(scope => {
+        const newScopeId = `s-${Date.now()}-${Math.random().toString(36).substring(2,9)}`;
+        oldToNewScopeIdMap.set(scope.id, newScopeId);
+        return {
+            ...scope,
+            id: newScopeId,
+            cycleId: newCycle.id,
+        };
+    });
+
+    // 3. Duplicate cycle items
+    const oldCycleItems = cycleItems.filter(item => item.cycleId === cycleToDuplicate.id);
+    const newCycleItems: CycleItem[] = oldCycleItems.map(item => {
+        const newScopeId = oldToNewScopeIdMap.get(item.scopeId);
+        if (!newScopeId) {
+            console.warn(`Could not find new scope for old scope ${item.scopeId}`);
+            return null; // or handle error appropriately
+        }
+        return {
+            ...item,
+            id: `ci-${Date.now()}-${item.testId}-${Math.random().toString(36).substring(2, 9)}`,
+            cycleId: newCycle.id,
+            scopeId: newScopeId,
+            assigneeId: null, // Clear assignee
+            result: CycleItemResult.NOT_RUN, // Reset result
+            updatedAt: new Date().toLocaleDateString(),
+            // map and configurations are kept as per requirements.
+        };
+    }).filter((item): item is CycleItem => item !== null);
+
+    // 4. Update state
+    setCycles(prev => [newCycle, ...prev]);
+    setScopes(prev => [...prev, ...newScopes]);
+    setCycleItems(prev => [...prev, ...newCycleItems]);
   };
 
   if (selectedCycle) {
@@ -145,6 +209,7 @@ const CyclesView: React.FC = () => {
               <th className="p-3 text-sm font-semibold text-gray-500 dark:text-gray-400">Status</th>
               <th className="p-3 text-sm font-semibold text-gray-500 dark:text-gray-400">Progress</th>
               <th className="p-3 text-sm font-semibold text-gray-500 dark:text-gray-400">Last Updated</th>
+              <th className="p-3 text-sm font-semibold text-gray-500 dark:text-gray-400 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
@@ -158,6 +223,20 @@ const CyclesView: React.FC = () => {
                 <td className="p-3"><CycleStatusBadge status={cycle.status} /></td>
                 <td className="p-3 w-1/3"><CycleProgress items={cycleItems.filter(item => item.cycleId === cycle.id)} /></td>
                 <td className="p-3 text-gray-500 dark:text-gray-400">{cycle.updatedAt}</td>
+                <td className="p-3 text-right">
+                    {permissions.canCreateCycles && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleDuplicateCycle(cycle);
+                            }}
+                            title="Duplicate Cycle"
+                            className="p-1.5 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white"
+                        >
+                            <CopyIcon className="w-5 h-5" />
+                        </button>
+                    )}
+                </td>
               </tr>
             ))}
           </tbody>
