@@ -78,7 +78,7 @@ const CycleProgress: React.FC<{ items: CycleItem[] }> = ({ items }) => {
 
 
 const CyclesView: React.FC = () => {
-  const { cycles, setCycles, cycleItems, setScopes } = useData();
+  const { cycles, setCycles, cycleItems, setScopes, permissions } = useData();
   const [selectedCycle, setSelectedCycle] = useState<Cycle | null>(null);
   const [isNewCycleModalOpen, setIsNewCycleModalOpen] = useState(false);
 
@@ -123,13 +123,15 @@ const CyclesView: React.FC = () => {
       {isNewCycleModalOpen && <NewCycleModal onClose={() => setIsNewCycleModalOpen(false)} onCreate={handleCreateCycle} />}
       <header className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">Test Cycles</h1>
-        <button 
-          onClick={() => setIsNewCycleModalOpen(true)}
-          className="flex items-center bg-blue-accent text-white px-4 py-1.5 rounded-md hover:bg-blue-600 transition-colors"
-        >
-          <PlusIcon className="w-5 h-5 mr-2" />
-          New Cycle
-        </button>
+        {permissions.canCreateCycles && (
+            <button 
+            onClick={() => setIsNewCycleModalOpen(true)}
+            className="flex items-center bg-blue-accent text-white px-4 py-1.5 rounded-md hover:bg-blue-600 transition-colors"
+            >
+            <PlusIcon className="w-5 h-5 mr-2" />
+            New Cycle
+            </button>
+        )}
       </header>
       <div className="flex-1 overflow-y-auto">
         <table className="w-full text-left">

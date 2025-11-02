@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Test, Priority, TestStatus } from '../types';
 import { MoreHorizontalIcon } from './icons/MoreHorizontalIcon';
@@ -23,9 +24,10 @@ interface TestListProps {
   selectedTestIds: Set<string>;
   onSelectTest: (testId: string) => void;
   onSelectAllTests: () => void;
+  canEdit: boolean;
 }
 
-const TestList: React.FC<TestListProps> = ({ tests, onEdit, onArchive, selectedTestIds, onSelectTest, onSelectAllTests }) => {
+const TestList: React.FC<TestListProps> = ({ tests, onEdit, onArchive, selectedTestIds, onSelectTest, onSelectAllTests, canEdit }) => {
   const [expandedTestId, setExpandedTestId] = useState<string | null>(null);
 
   const handleDragStart = (e: React.DragEvent, testId: string) => {
@@ -67,8 +69,8 @@ const TestList: React.FC<TestListProps> = ({ tests, onEdit, onArchive, selectedT
                 <React.Fragment key={test.id}>
                     <tr 
                         className={`border-b border-gray-200 dark:border-gray-800 ${selectedTestIds.has(test.id) ? 'bg-blue-accent/20' : 'hover:bg-gray-100/60 dark:hover:bg-gray-800/60'}`}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, test.id)}
+                        draggable={canEdit}
+                        onDragStart={(e) => canEdit && handleDragStart(e, test.id)}
                     >
                         <td className="py-1.5 px-3">
                             <div className="flex items-center space-x-2">
@@ -106,11 +108,16 @@ const TestList: React.FC<TestListProps> = ({ tests, onEdit, onArchive, selectedT
                         </td>
                         <td className="py-1.5 px-3">
                             <div className="flex items-center space-x-1">
-                                <button onClick={() => onEdit(test)} title="Edit Test" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"><EditIcon className="w-4 h-4" /></button>
-                                {test.status !== TestStatus.ARCHIVED &&
-                                <button onClick={() => onArchive(test)} title="Archive Test" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"><ArchiveIcon className="w-4 h-4" /></button>
-                                }
-                                <button title="More Options" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"><MoreHorizontalIcon className="w-4 h-4" /></button>
+                                {canEdit ? (
+                                    <>
+                                        <button onClick={() => onEdit(test)} title="Edit Test" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"><EditIcon className="w-4 h-4" /></button>
+                                        {test.status !== TestStatus.ARCHIVED &&
+                                        <button onClick={() => onArchive(test)} title="Archive Test" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"><ArchiveIcon className="w-4 h-4" /></button>
+                                        }
+                                    </>
+                                ) : (
+                                    <span className="text-xs text-gray-400 dark:text-gray-500 italic">Read-only</span>
+                                )}
                             </div>
                         </td>
                     </tr>

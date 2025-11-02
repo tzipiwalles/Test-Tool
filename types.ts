@@ -46,6 +46,20 @@ export enum ScopeName {
   SCALE_TEST = 'Scale-test',
 }
 
+export enum UserRole {
+  VIEWER = 'viewer',
+  ANALYST = 'analyst',
+  VALIDATION_LEAD = 'validation_lead',
+  MAINTAINER = 'maintainer',
+}
+
+export interface Permissions {
+  canEditLibrary: boolean;
+  canCreateCycles: boolean;
+  canEditCycles: boolean;
+  canRunTests: boolean;
+  isViewer: boolean;
+}
 
 export interface MapInfo {
   mapName: string;
@@ -56,6 +70,7 @@ export interface User {
   id: UUID;
   displayName: string;
   email: string;
+  role: UserRole;
 }
 
 export interface Folder {

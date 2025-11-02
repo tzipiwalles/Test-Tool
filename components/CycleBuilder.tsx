@@ -1,5 +1,6 @@
+
 import React, { useState, useMemo, useCallback } from 'react';
-import { Cycle, Test, CycleItem, CycleItemResult, User, CycleStatus, Scope, ScopeName, Priority, Folder } from '../types';
+import { Cycle, Test, CycleItem, CycleItemResult, User, CycleStatus, Scope, ScopeName, Priority, Folder, Permissions } from '../types';
 import { useData } from './DataContext';
 import { buildFolderTree } from '../data/mockData';
 import FolderTree from './FolderTree';
@@ -148,6 +149,7 @@ const AddTestsModal: React.FC<{
                 onDropFolder={() => {}}
                 expandedFolders={expandedFolders}
                 onToggleFolder={toggleFolder}
+                canEdit={false}
               />
             </div>
           </aside>
@@ -380,7 +382,7 @@ const CycleBuilder: React.FC<{
   onBack: () => void;
   onUpdateCycle: (cycle: Cycle) => void;
 }> = ({ cycle, onBack, onUpdateCycle }) => {
-    const { cycleItems, setCycleItems, users, scopes, setScopes, tests, maps, configurations } = useData();
+    const { cycleItems, setCycleItems, users, scopes, setScopes, tests, maps, configurations, permissions } = useData();
     const [editingCycle, setEditingCycle] = useState<Cycle>(cycle);
     const [isAddTestModalOpen, setIsAddTestModalOpen] = useState(false);
     const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
@@ -622,14 +624,14 @@ const CycleBuilder: React.FC<{
 
     return (
         <div className="flex flex-col h-full p-6 overflow-hidden">
-             {isAddTestModalOpen && (
+             {permissions.canEditCycles && isAddTestModalOpen && (
                 <AddTestsModal 
                     onClose={() => setIsAddTestModalOpen(false)} 
                     onAddTests={handleAddTests}
                     existingTestCounts={existingTestCountsInScope}
                 />
             )}
-            {isBulkEditModalOpen && (
+            {permissions.canRunTests && isBulkEditModalOpen && (
                 <BulkCycleItemEditModal
                     count={selectedItemIds.size}
                     onClose={() => setIsBulkEditModalOpen(false)}
@@ -651,54 +653,58 @@ const CycleBuilder: React.FC<{
                 </div>
             </header>
             
-            <details className="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-4 mb-4 flex-shrink-0">
+            <details className="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-4 mb-4 flex-shrink-0" open>
                 <summary className="font-semibold cursor-pointer">Cycle Details</summary>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Description</label>
-                        <textarea name="description" value={editingCycle.description} onChange={handleDetailsChange} rows={3} className="mt-1 w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2"></textarea>
-                    </div>
-                     <div className="grid grid-rows-3 gap-2">
+                <fieldset disabled={!permissions.canEditCycles} className="disabled:opacity-70">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Version</label>
-                            <input type="text" name="version" value={editingCycle.version || ''} onChange={handleDetailsChange} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2"/>
+                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Description</label>
+                            <textarea name="description" value={editingCycle.description} onChange={handleDetailsChange} rows={3} className="mt-1 w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 disabled:bg-gray-100 dark:disabled:bg-gray-800"></textarea>
+                        </div>
+                        <div className="grid grid-rows-3 gap-2">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Version</label>
+                                <input type="text" name="version" value={editingCycle.version || ''} onChange={handleDetailsChange} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 disabled:bg-gray-100 dark:disabled:bg-gray-800"/>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Ref Version</label>
+                                <input type="text" name="refVersion" value={editingCycle.refVersion || ''} onChange={handleDetailsChange} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 disabled:bg-gray-100 dark:disabled:bg-gray-800"/>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Labels</label>
+                                <input type="text" value={(editingCycle.labels || []).join(', ')} onChange={handleLabelsChange} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 disabled:bg-gray-100 dark:disabled:bg-gray-800"/>
+                            </div>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Ref Version</label>
-                            <input type="text" name="refVersion" value={editingCycle.refVersion || ''} onChange={handleDetailsChange} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2"/>
-                        </div>
-                         <div>
-                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Labels</label>
-                            <input type="text" value={(editingCycle.labels || []).join(', ')} onChange={handleLabelsChange} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2"/>
+                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">Map Links</label>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                                {(editingCycle.mapsInfo || []).map((info, index) => (
+                                    <div key={index} className="flex items-center gap-2">
+                                        <EditableDatalistInput
+                                            className="w-1/3"
+                                            inputClassName="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"
+                                            value={info.mapName}
+                                            onChange={value => handleMapsInfoChange(index, 'mapName', value || '')}
+                                            options={maps}
+                                            placeholder="Map Name"
+                                        />
+                                        <input type="text" placeholder="URL" value={info.link} onChange={e => handleMapsInfoChange(index, 'link', e.target.value)} className="flex-1 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/>
+                                        <button onClick={() => removeMapInfo(index)} className="text-gray-400 hover:text-red-500"><TrashIcon className="w-4 h-4"/></button>
+                                    </div>
+                                ))}
+                            </div>
+                             {permissions.canEditCycles && <button onClick={addMapInfo} className="text-sm text-blue-500 hover:underline mt-2">Add Map Link</button>}
                         </div>
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">Map Links</label>
-                        <div className="space-y-2 max-h-48 overflow-y-auto">
-                            {(editingCycle.mapsInfo || []).map((info, index) => (
-                                <div key={index} className="flex items-center gap-2">
-                                     <EditableDatalistInput
-                                        className="w-1/3"
-                                        inputClassName="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1"
-                                        value={info.mapName}
-                                        onChange={value => handleMapsInfoChange(index, 'mapName', value || '')}
-                                        options={maps}
-                                        placeholder="Map Name"
-                                    />
-                                    <input type="text" placeholder="URL" value={info.link} onChange={e => handleMapsInfoChange(index, 'link', e.target.value)} className="flex-1 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1"/>
-                                    <button onClick={() => removeMapInfo(index)} className="text-gray-400 hover:text-red-500"><TrashIcon className="w-4 h-4"/></button>
-                                </div>
-                            ))}
+                    {permissions.canEditCycles && (
+                        <div className="flex justify-end mt-4">
+                            <button onClick={handleSaveDetails} className="flex items-center bg-blue-accent text-white px-4 py-1.5 rounded-md hover:bg-blue-600 transition-colors text-sm">
+                                <SaveIcon className="w-4 h-4 mr-2"/>
+                                Save Details
+                            </button>
                         </div>
-                        <button onClick={addMapInfo} className="text-sm text-blue-500 hover:underline mt-2">Add Map Link</button>
-                    </div>
-                </div>
-                <div className="flex justify-end mt-4">
-                    <button onClick={handleSaveDetails} className="flex items-center bg-blue-accent text-white px-4 py-1.5 rounded-md hover:bg-blue-600 transition-colors text-sm">
-                        <SaveIcon className="w-4 h-4 mr-2"/>
-                        Save Details
-                    </button>
-                </div>
+                    )}
+                </fieldset>
             </details>
 
             <div className="border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
@@ -709,20 +715,23 @@ const CycleBuilder: React.FC<{
                                 value={scope.name}
                                 onChange={(e) => handleUpdateScope(scope.id, { name: e.target.value as ScopeName })}
                                 onClick={(e) => e.stopPropagation()}
-                                className={`bg-transparent font-medium text-sm focus:outline-none appearance-none cursor-pointer ${selectedScopeId === scope.id ? 'text-blue-accent' : 'text-gray-500 group-hover:text-gray-700 dark:group-hover:text-gray-200'}`}
+                                disabled={!permissions.canEditCycles}
+                                className={`bg-transparent font-medium text-sm focus:outline-none appearance-none cursor-pointer ${selectedScopeId === scope.id ? 'text-blue-accent' : 'text-gray-500 group-hover:text-gray-700 dark:group-hover:text-gray-200'} disabled:text-gray-400 dark:disabled:text-gray-500 disabled:cursor-not-allowed`}
                             >
                                 {Object.values(ScopeName).map(name => <option key={name} value={name}>{name}</option>)}
                             </select>
-                            {cycleScopes.length > 1 && (
+                            {permissions.canEditCycles && cycleScopes.length > 1 && (
                                 <button onClick={(e) => { e.stopPropagation(); handleDeleteScope(scope.id); }} className="ml-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Delete Scope">
                                     <TrashIcon className="w-3 h-3"/>
                                 </button>
                             )}
                         </div>
                     ))}
-                    <button onClick={handleAddScope} className="flex items-center text-sm text-blue-500 hover:underline py-3 px-1">
-                        <PlusIcon className="w-4 h-4 mr-1" /> Add Scope
-                    </button>
+                    {permissions.canEditCycles && (
+                        <button onClick={handleAddScope} className="flex items-center text-sm text-blue-500 hover:underline py-3 px-1">
+                            <PlusIcon className="w-4 h-4 mr-1" /> Add Scope
+                        </button>
+                    )}
                 </nav>
             </div>
             
@@ -739,7 +748,7 @@ const CycleBuilder: React.FC<{
                             <option value="affectedObjectType">Affected Object</option>
                         </select>
                     </div>
-                     {selectedItemIds.size > 0 && (
+                     {permissions.canRunTests && selectedItemIds.size > 0 && (
                         <div className="flex items-center gap-1 border border-gray-300 dark:border-gray-600 rounded-md p-0.5">
                             <button onClick={() => setIsBulkEditModalOpen(true)} className="px-3 py-1 text-sm rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">
                                Bulk Edit ({selectedItemIds.size})
@@ -760,9 +769,11 @@ const CycleBuilder: React.FC<{
                          </div>
                     )}
                 </div>
-                <button onClick={() => setIsAddTestModalOpen(true)} className="flex items-center bg-blue-accent text-white px-4 py-1.5 rounded-md hover:bg-blue-600 transition-colors text-sm">
-                    <PlusIcon className="w-4 h-4 mr-2" /> Add Tests from Library
-                </button>
+                {permissions.canEditCycles && (
+                    <button onClick={() => setIsAddTestModalOpen(true)} className="flex items-center bg-blue-accent text-white px-4 py-1.5 rounded-md hover:bg-blue-600 transition-colors text-sm">
+                        <PlusIcon className="w-4 h-4 mr-2" /> Add Tests from Library
+                    </button>
+                )}
             </div>
 
             <div className="flex-1 overflow-y-auto border-t border-gray-200 dark:border-gray-700">
@@ -803,16 +814,14 @@ const CycleBuilder: React.FC<{
                                            </td>
                                        </tr>
                                        {items.map(item => (
-                                         // Fix: Pass correct handler functions
-                                         <CycleTestRow key={item.id} item={item} allUsers={allUsers} maps={maps} configurations={configurations} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} />
+                                         <CycleTestRow key={item.id} item={item} allUsers={allUsers} maps={maps} configurations={configurations} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} permissions={permissions} />
                                        ))}
                                    </React.Fragment>
                                )
                            })
                         ) : (
                             itemsInCurrentScope.map(item => (
-                               // Fix: Pass correct handler functions
-                               <CycleTestRow key={item.id} item={item} allUsers={allUsers} maps={maps} configurations={configurations} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} />
+                               <CycleTestRow key={item.id} item={item} allUsers={allUsers} maps={maps} configurations={configurations} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} permissions={permissions} />
                             ))
                         )}
                          {itemsInCurrentScope.length === 0 && (
@@ -834,7 +843,8 @@ const CycleTestRow: React.FC<{
     onRemoveItem: (id: string) => void;
     onSelectItem: (id: string, event: React.ChangeEvent<HTMLInputElement>) => void;
     isSelected: boolean;
-}> = ({ item, allUsers, maps, configurations, onUpdateItem, onRemoveItem, onSelectItem, isSelected }) => (
+    permissions: Permissions;
+}> = ({ item, allUsers, maps, configurations, onUpdateItem, onRemoveItem, onSelectItem, isSelected, permissions }) => (
     <tr className={isSelected ? 'bg-blue-accent/20' : 'hover:bg-gray-100/50 dark:hover:bg-gray-800/50'}>
         <td className="p-2"><input type="checkbox" checked={isSelected} onChange={(e) => onSelectItem(item.id, e)} className="h-4 w-4 bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-600 rounded text-blue-accent focus:ring-blue-accent"/></td>
         <td className="p-2 font-medium text-sm text-gray-900 dark:text-gray-100">{item.testSnapshot.name}</td>
@@ -842,40 +852,48 @@ const CycleTestRow: React.FC<{
             <select
                 value={item.assigneeId || ''}
                 onChange={e => onUpdateItem(item.id, { assigneeId: e.target.value || null })}
-                className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm focus:ring-blue-accent focus:border-blue-accent"
+                disabled={!permissions.canRunTests}
+                className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm focus:ring-blue-accent focus:border-blue-accent disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
             >
                 {allUsers.map(user => <option key={user.id} value={user.id}>{user.displayName}</option>)}
             </select>
         </td>
         <td className="p-1">
-            <EditableDatalistInput
-                value={item.map}
-                onChange={value => onUpdateItem(item.id, { map: value })}
-                options={maps}
-                inputClassName="w-full bg-transparent text-sm p-1 rounded-md border border-transparent text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 focus:ring-1 focus:ring-blue-accent focus:border-blue-accent focus:bg-white dark:focus:bg-gray-700"
-            />
+            <fieldset disabled={!permissions.canRunTests} className="disabled:opacity-70">
+                <EditableDatalistInput
+                    value={item.map}
+                    onChange={value => onUpdateItem(item.id, { map: value })}
+                    options={maps}
+                    inputClassName="w-full bg-transparent text-sm p-1 rounded-md border border-transparent text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 focus:ring-1 focus:ring-blue-accent focus:border-blue-accent focus:bg-white dark:focus:bg-gray-700 disabled:bg-transparent dark:disabled:bg-transparent"
+                />
+            </fieldset>
         </td>
         <td className="p-1">
-            <EditableDatalistInput
-                value={item.configuration}
-                onChange={value => onUpdateItem(item.id, { configuration: value })}
-                options={configurations}
-                inputClassName="w-full bg-transparent text-sm p-1 rounded-md border border-transparent text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 focus:ring-1 focus:ring-blue-accent focus:border-blue-accent focus:bg-white dark:focus:bg-gray-700"
-            />
+            <fieldset disabled={!permissions.canRunTests} className="disabled:opacity-70">
+                <EditableDatalistInput
+                    value={item.configuration}
+                    onChange={value => onUpdateItem(item.id, { configuration: value })}
+                    options={configurations}
+                    inputClassName="w-full bg-transparent text-sm p-1 rounded-md border border-transparent text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 focus:ring-1 focus:ring-blue-accent focus:border-blue-accent focus:bg-white dark:focus:bg-gray-700 disabled:bg-transparent dark:disabled:bg-transparent"
+                />
+            </fieldset>
         </td>
         <td className="p-2">
             <select
                 value={item.result}
                 onChange={e => onUpdateItem(item.id, { result: e.target.value as CycleItemResult })}
-                className={`w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm focus:ring-blue-accent focus:border-blue-accent ${getResultColorClass(item.result)}`}
+                disabled={!permissions.canRunTests}
+                className={`w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm focus:ring-blue-accent focus:border-blue-accent disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed ${getResultColorClass(item.result)}`}
             >
                 {Object.values(CycleItemResult).map(r => <option key={r} value={r} className="text-gray-900 dark:text-gray-100 capitalize">{r.replace(/_/g, ' ')}</option>)}
             </select>
         </td>
         <td className="p-2">
-            <button onClick={() => onRemoveItem(item.id)} title="Remove test from cycle" className="text-gray-400 hover:text-red-500">
-                <TrashIcon className="w-4 h-4" />
-            </button>
+            {permissions.canEditCycles ? (
+                <button onClick={() => onRemoveItem(item.id)} title="Remove test from cycle" className="text-gray-400 hover:text-red-500">
+                    <TrashIcon className="w-4 h-4" />
+                </button>
+            ) : <div className="w-4 h-4" /> }
         </td>
     </tr>
 )

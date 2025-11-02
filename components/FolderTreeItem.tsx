@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Folder } from '../types';
 import { FolderIcon } from './icons/FolderIcon';
@@ -14,9 +15,10 @@ interface FolderTreeItemProps {
   onDeleteFolder?: (folderId: string) => void;
   expandedFolders: Set<string>;
   onToggleFolder: (id:string) => void;
+  canEdit: boolean;
 }
 
-const FolderTreeItem: React.FC<FolderTreeItemProps> = ({ folder, level, selectedFolderId, onSelectFolder, onDropTest, onDropFolder, onDeleteFolder, expandedFolders, onToggleFolder }) => {
+const FolderTreeItem: React.FC<FolderTreeItemProps> = ({ folder, level, selectedFolderId, onSelectFolder, onDropTest, onDropFolder, onDeleteFolder, expandedFolders, onToggleFolder, canEdit }) => {
   const isOpen = expandedFolders.has(folder.id);
 
   const handleDragStart = (e: React.DragEvent, type: 'folder', id: string) => {
@@ -45,18 +47,18 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({ folder, level, selected
   return (
     <div>
       <div
-        className={`group flex items-center p-1.5 rounded-md cursor-pointer transition-colors ${
+        className={`group flex items-center p-1.5 rounded-md transition-colors ${canEdit ? 'cursor-pointer' : 'cursor-default'} ${
           isSelected ? 'bg-blue-accent/20 text-blue-600 dark:text-blue-300' : 'hover:bg-gray-200 dark:hover:bg-gray-800'
         }`}
         style={{ paddingLeft: `${level * 1.25}rem` }}
         onClick={() => onSelectFolder(folder.id)}
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        draggable
-        onDragStart={(e) => handleDragStart(e, 'folder', folder.id)}
+        onDrop={canEdit ? handleDrop : undefined}
+        onDragOver={canEdit ? handleDragOver : undefined}
+        draggable={canEdit}
+        onDragStart={canEdit ? (e) => handleDragStart(e, 'folder', folder.id) : undefined}
       >
         <ChevronDownIcon
-          className={`w-4 h-4 mr-2 transition-transform ${isOpen ? 'rotate-0' : '-rotate-90'}`}
+          className={`w-4 h-4 mr-2 transition-transform cursor-pointer ${isOpen ? 'rotate-0' : '-rotate-90'}`}
           onClick={(e) => {
             e.stopPropagation();
             onToggleFolder(folder.id);
@@ -64,7 +66,7 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({ folder, level, selected
         />
         <FolderIcon className="w-5 h-5 mr-2 text-yellow-500" />
         <span className="flex-1 truncate">{folder.name}</span>
-        {onDeleteFolder && (
+        {canEdit && onDeleteFolder && (
             <button 
                 onClick={(e) => {
                     e.stopPropagation();
@@ -93,6 +95,7 @@ const FolderTreeItem: React.FC<FolderTreeItemProps> = ({ folder, level, selected
                     onDeleteFolder={onDeleteFolder}
                     expandedFolders={expandedFolders}
                     onToggleFolder={onToggleFolder}
+                    canEdit={canEdit}
                 />
             ))}
         </div>

@@ -1,6 +1,6 @@
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Folder, Test, Cycle, CycleItem, User, Scope } from '../types';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
+import { Folder, Test, Cycle, CycleItem, User, Scope, UserRole, Permissions } from '../types';
 import { 
     mockFolders as initialFolders, 
     mockTests as initialTests, 
@@ -11,6 +11,18 @@ import {
     mockConfigurations as initialConfigurations,
     mockScopes as initialScopes
 } from '../data/mockData';
+
+const getPermissions = (user: User | null): Permissions => {
+  const role = user?.role;
+
+  const canEditLibrary = role === UserRole.MAINTAINER;
+  const canCreateCycles = role === UserRole.MAINTAINER || role === UserRole.VALIDATION_LEAD;
+  const canEditCycles = role === UserRole.MAINTAINER || role === UserRole.VALIDATION_LEAD;
+  const canRunTests = role === UserRole.MAINTAINER || role === UserRole.VALIDATION_LEAD || role === UserRole.ANALYST;
+  const isViewer = role === UserRole.VIEWER;
+
+  return { canEditLibrary, canCreateCycles, canEditCycles, canRunTests, isViewer };
+};
 
 interface DataContextType {
   folders: Omit<Folder, 'children' | 'tests'>[];
@@ -32,6 +44,9 @@ interface DataContextType {
   isLoading: boolean;
   theme: 'light' | 'dark';
   toggleTheme: () => void;
+  currentUser: User | null;
+  setCurrentUser: React.Dispatch<React.SetStateAction<User | null>>;
+  permissions: Permissions;
 }
 
 const DataContext = createContext<DataContextType | null>(null);
@@ -56,6 +71,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [users, setUsers] = useState<User[]>(() => getItem('users', initialUsers));
   const [maps, setMaps] = useState<string[]>(() => getItem('maps', initialMaps));
   const [configurations, setConfigurations] = useState<string[]>(() => getItem('configurations', initialConfigurations));
+
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    const savedUser = getItem<User | null>('currentUser', null);
+    // Default to Tzipi (maintainer) if no user is saved or found
+    return savedUser || initialUsers.find(u => u.role === UserRole.MAINTAINER) || initialUsers[0];
+  });
+
+  const permissions = useMemo(() => getPermissions(currentUser), [currentUser]);
 
   const [isLoading, setIsLoading] = useState(false);
 
@@ -107,6 +130,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
       localStorage.setItem('users', JSON.stringify(users));
   }, [users]);
+
+   useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('currentUser', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('currentUser');
+    }
+  }, [currentUser]);
   
   useEffect(() => {
       localStorage.setItem('maps', JSON.stringify(maps));
@@ -136,6 +167,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     isLoading,
     theme,
     toggleTheme,
+    currentUser,
+    setCurrentUser,
+    permissions,
   };
 
   return (

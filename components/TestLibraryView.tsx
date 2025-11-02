@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Folder, Test, Priority, TestStatus, TestStep } from '../types';
+import { Folder, Test, Priority, TestStatus, TestStep, UUID } from '../types';
 import { buildFolderTree } from '../data/mockData';
 import FolderTree from './FolderTree';
 import TestList from './TestList';
@@ -9,6 +9,8 @@ import { useData } from './DataContext';
 import { ChevronLeftIcon } from './icons/ChevronLeftIcon';
 import { ExpandAllIcon } from './icons/ExpandAllIcon';
 import { CollapseAllIcon } from './icons/CollapseAllIcon';
+import { DownloadIcon } from './icons/DownloadIcon';
+import { UploadIcon } from './icons/UploadIcon';
 
 // A generic Modal component for reuse within this view
 const Modal: React.FC<{ children: React.ReactNode; onClose: () => void; title: string }> = ({ children, onClose, title }) => (
@@ -251,9 +253,19 @@ const BulkTestEditModal: React.FC<{
   );
 };
 
+const ImportStatusModal: React.FC<{ status: { message: string, error?: boolean }; onClose: () => void; }> = ({ status, onClose }) => (
+  <Modal onClose={onClose} title="Import Status">
+    <div className={`p-4 rounded-md ${status.error ? 'bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-200' : 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200'}`}>
+        <p className="whitespace-pre-wrap">{status.message}</p>
+    </div>
+    <div className="flex justify-end mt-4">
+        <button onClick={onClose} className="px-4 py-2 rounded-md bg-blue-accent hover:bg-blue-600 text-white">Close</button>
+    </div>
+  </Modal>
+);
 
 const TestLibraryView: React.FC = () => {
-  const { folders, tests, setFolders, setTests } = useData();
+  const { folders, tests, setFolders, setTests, permissions, currentUser } = useData();
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(folders[0]?.id || null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showArchived, setShowArchived] = useState(false);
@@ -269,6 +281,10 @@ const TestLibraryView: React.FC = () => {
   const [sidebarWidth, setSidebarWidth] = useState(320);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const isResizing = useRef(false);
+  
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importStatus, setImportStatus] = useState<{message: string, error?: boolean} | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
@@ -293,11 +309,12 @@ const TestLibraryView: React.FC = () => {
   };
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (isSidebarCollapsed) return;
     e.preventDefault();
     isResizing.current = true;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
-  }, []);
+  }, [isSidebarCollapsed]);
 
   const handleMouseUp = useCallback(() => {
     isResizing.current = false;
@@ -324,6 +341,25 @@ const TestLibraryView: React.FC = () => {
   }, [handleMouseMove, handleMouseUp]);
   
   const folderTree = useMemo(() => buildFolderTree(folders, tests), [folders, tests]);
+  
+  const folderPathMap = useMemo(() => {
+    const map = new Map<string, string>();
+    const allFolders = [...folders];
+
+    function getPath(folderId: string): string {
+      if (map.has(folderId)) return map.get(folderId)!;
+      
+      const folder = allFolders.find(f => f.id === folderId);
+      if (!folder) return '';
+      
+      const path = folder.parentId ? `${getPath(folder.parentId)}/${folder.name}` : `/${folder.name}`;
+      map.set(folderId, path);
+      return path;
+    }
+    
+    allFolders.forEach(f => getPath(f.id));
+    return map;
+  }, [folders]);
 
   const getAllChildFolderIds = useCallback((folderId: string, allFolders: Omit<Folder, 'children' | 'tests'>[]): string[] => {
     let ids: string[] = [];
@@ -361,14 +397,14 @@ const TestLibraryView: React.FC = () => {
   
   const handleSaveTest = (testData: Partial<Test>) => {
     if (testData.id) { // Edit
-        setTests(prev => prev.map(t => t.id === testData.id ? { ...t, ...testData, updatedAt: new Date().toLocaleDateString() } as Test : t));
+        setTests(prev => prev.map(t => t.id === testData.id ? { ...t, ...testData, updatedAt: new Date().toLocaleDateString(), updatedBy: currentUser?.displayName || 'System' } as Test : t));
     } else { // Create
         const newTest: Test = {
             id: `t-${Date.now()}`,
             folderId: selectedFolderId!,
             status: TestStatus.ACTIVE,
             updatedAt: new Date().toLocaleDateString(),
-            updatedBy: 'current_user', // placeholder
+            updatedBy: currentUser?.displayName || 'System',
             ...testData,
             steps: testData.steps || [],
             labels: testData.labels || [],
@@ -409,7 +445,7 @@ const TestLibraryView: React.FC = () => {
 
   const handleBulkEditSave = (changes: BulkChanges) => {
     setTests(prev => prev.map(test => 
-        selectedTestIds.has(test.id) ? { ...test, ...changes } : test
+        selectedTestIds.has(test.id) ? { ...test, ...changes, updatedAt: new Date().toLocaleDateString(), updatedBy: currentUser?.displayName || 'System' } : test
     ));
     setIsBulkEditModalOpen(false);
     setSelectedTestIds(new Set());
@@ -424,7 +460,6 @@ const TestLibraryView: React.FC = () => {
   };
 
   const handleDeleteFolder = (folderId: string) => {
-    // Basic delete: assumes no nested items. A real app would need recursive deletion or validation.
     const folderIdsToDelete = [folderId, ...getAllChildFolderIds(folderId, folders)];
     setFolders(prev => prev.filter(f => !folderIdsToDelete.includes(f.id)));
     setTests(prev => prev.filter(t => !folderIdsToDelete.includes(t.folderId)));
@@ -434,22 +469,272 @@ const TestLibraryView: React.FC = () => {
     }
   };
 
+  const handleExportCSV = () => {
+    const headers = ['id', 'name', 'folderPath', 'status', 'description', 'steps', 'labels', 'priority', 'affectedObjectType', 'testMethod', 'estimated_duration_sec', 'map', 'configuration'];
+    
+    const escapeCSV = (str: string | number | null | undefined): string => {
+        const s = String(str ?? '');
+        if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+            return `"${s.replace(/"/g, '""')}"`;
+        }
+        return s;
+    };
+    
+    const rows = tests.map(test => {
+        const folderPath = folderPathMap.get(test.folderId) || '/';
+        const stepsString = test.steps.map(s => `${s.action || ''}||${s.expected || ''}`).join('@@');
+        const labelsString = test.labels.join(',');
+
+        return [
+            test.id, test.name, folderPath, test.status, test.description, stepsString,
+            labelsString, test.priority, test.affectedObjectType, test.testMethod,
+            test.estimated_duration_sec, test.map, test.configuration
+        ].map(escapeCSV).join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    const date = new Date().toISOString().split('T')[0];
+    link.setAttribute("download", `catalyst_tests_export_${date}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+  
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      setIsImportModalOpen(true);
+      setImportStatus({ message: "Reading and parsing file..." });
+
+      try {
+        const csvText = await file.text();
+        processCSVData(csvText);
+      } catch (error) {
+          setImportStatus({ message: `Error reading file: ${error instanceof Error ? error.message : String(error)}`, error: true });
+      } finally {
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      }
+  };
+
+  const processCSVData = (csvText: string) => {
+    const parseCsv = (text: string): string[][] => {
+        const rows: string[][] = [];
+        let currentRow: string[] = [];
+        let field = '';
+        let inQuotes = false;
+
+        text = text.replace(/\r\n/g, '\n');
+
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            if (inQuotes) {
+                if (char === '"') {
+                    if (i + 1 < text.length && text[i + 1] === '"') {
+                        field += '"';
+                        i++; // Skip escaped quote
+                    } else {
+                        inQuotes = false;
+                    }
+                } else {
+                    field += char;
+                }
+            } else {
+                if (char === '"') {
+                    if (field === '') {
+                        inQuotes = true;
+                    } else {
+                        field += char; // Treat as part of the field if not at the start
+                    }
+                } else if (char === ',') {
+                    currentRow.push(field);
+                    field = '';
+                } else if (char === '\n') {
+                    currentRow.push(field);
+                    rows.push(currentRow);
+                    currentRow = [];
+                    field = '';
+                } else {
+                    field += char;
+                }
+            }
+        }
+        
+        if (field || currentRow.length > 0) {
+            currentRow.push(field);
+            rows.push(currentRow);
+        }
+        return rows;
+    };
+
+    const parsedRows = parseCsv(csvText);
+    const nonEmptyRows = parsedRows.filter(row => row.length > 1 || (row.length === 1 && row[0] !== ''));
+
+    if (nonEmptyRows.length < 1) {
+        setImportStatus({ message: "CSV file is empty or has no header.", error: true });
+        return;
+    }
+    
+    const headerRow = nonEmptyRows.shift();
+    if (!headerRow) {
+      setImportStatus({ message: "CSV file has no header.", error: true });
+      return;
+    }
+    const headers = headerRow.map(h => h.trim());
+
+    const requiredHeaders = ['name', 'folderPath'];
+    if (!requiredHeaders.every(h => headers.includes(h))) {
+        setImportStatus({ message: `CSV is missing required headers. Required: ${requiredHeaders.join(', ')}`, error: true });
+        return;
+    }
+
+    const newTests: Test[] = [];
+    const updatedTests: Test[] = [];
+    const tempNewFolders: Omit<Folder, 'children' | 'tests'>[] = [];
+    const allCurrentFolders = [...folders];
+    
+    const pathIdCache = new Map<string, string>();
+    folders.forEach(f => {
+        const path = folderPathMap.get(f.id);
+        if (path) {
+            pathIdCache.set(path, f.id);
+        }
+    });
+    
+    let errors: string[] = [];
+
+    nonEmptyRows.forEach((values, index) => {
+      const row = headers.reduce((obj, key, i) => ({...obj, [key]: (values[i] || '').trim() }), {} as Record<string, string>);
+
+      if (!row.name || !row.folderPath) {
+          errors.push(`Row ${index + 2}: Missing required field 'name' or 'folderPath'.`);
+          return;
+      }
+      
+      let folderId: UUID;
+      if (pathIdCache.has(row.folderPath)) {
+          folderId = pathIdCache.get(row.folderPath)!;
+      } else {
+          const pathParts = row.folderPath.split('/').filter(p => p);
+          let currentParentId: UUID | null = null;
+          let currentPath = '';
+
+          for (const part of pathParts) {
+              currentPath += `/${part}`;
+              if (pathIdCache.has(currentPath)) {
+                  currentParentId = pathIdCache.get(currentPath)!;
+              } else {
+                  const newFolder: Omit<Folder, 'children' | 'tests'> = {
+                      id: `f-${Date.now()}-${Math.random().toString(36).substring(2,9)}`,
+                      name: part,
+                      parentId: currentParentId,
+                      path: currentPath,
+                  };
+                  tempNewFolders.push(newFolder);
+                  allCurrentFolders.push(newFolder);
+                  pathIdCache.set(currentPath, newFolder.id);
+                  currentParentId = newFolder.id;
+              }
+          }
+          if (currentParentId) {
+            folderId = currentParentId;
+          } else {
+            const rootFolder = allCurrentFolders.find(f => !f.parentId);
+            if(rootFolder) {
+              folderId = rootFolder.id;
+            } else {
+              errors.push(`Row ${index + 2}: Could not determine folder for path "${row.folderPath}" and no root folder found.`);
+              return;
+            }
+          }
+      }
+      
+      const steps: TestStep[] = (row.steps || '').split('@@').map((s, i) => {
+          const [action, expected] = s.split('||');
+          return { step_no: i + 1, action: action || '', expected: expected || '' };
+      }).filter(s => s.action || s.expected);
+      
+      const testData = {
+          name: row.name,
+          folderId,
+          status: Object.values(TestStatus).includes(row.status as TestStatus) ? row.status as TestStatus : TestStatus.ACTIVE,
+          description: row.description || '',
+          steps,
+          labels: (row.labels || '').split(',').map(l => l.trim()).filter(Boolean),
+          priority: Object.values(Priority).includes(row.priority as Priority) ? row.priority as Priority : Priority.P2,
+          affectedObjectType: row.affectedObjectType,
+          testMethod: row.testMethod,
+          estimated_duration_sec: parseInt(row.estimated_duration_sec, 10) || 60,
+          updatedAt: new Date().toLocaleDateString(),
+          updatedBy: currentUser?.displayName || 'System',
+          map: row.map,
+          configuration: row.configuration
+      };
+
+      const existingTest = tests.find(t => t.id === row.id);
+      if (existingTest) {
+          updatedTests.push({ ...existingTest, ...testData });
+      } else {
+          newTests.push({ ...testData, id: row.id || `t-${Date.now()}-${index}` });
+      }
+    });
+
+    if (errors.length > 0) {
+      setImportStatus({ message: `Import failed with ${errors.length} errors:\n${errors.slice(0, 5).join('\n')}`, error: true });
+      return;
+    }
+
+    if (tempNewFolders.length > 0) {
+        setFolders(prev => {
+            const existingIds = new Set(prev.map(f => f.id));
+            const uniqueNewFolders = tempNewFolders.filter(f => !existingIds.has(f.id));
+            return [...prev, ...uniqueNewFolders];
+        });
+    }
+    if (newTests.length > 0 || updatedTests.length > 0) {
+        setTests(prev => {
+            const updatedIds = new Set(updatedTests.map(t => t.id));
+            const oldTests = prev.filter(t => !updatedIds.has(t.id));
+            return [...oldTests, ...updatedTests, ...newTests];
+        });
+    }
+
+    setImportStatus({ message: `Import successful!\n- ${newTests.length} tests created.\n- ${updatedTests.length} tests updated.\n- ${tempNewFolders.length} folders created.` });
+  };
+
+
   return (
     <div className="flex h-full">
-        {editingTest && (
+        {permissions.canEditLibrary && editingTest && (
             <TestEditorModal 
                 test={editingTest} 
                 onClose={() => setEditingTest(null)}
                 onSave={handleSaveTest}
             />
         )}
-        {isBulkEditModalOpen && (
+        {permissions.canEditLibrary && isBulkEditModalOpen && (
             <BulkTestEditModal 
                 count={selectedTestIds.size}
                 onClose={() => setIsBulkEditModalOpen(false)}
                 onSave={handleBulkEditSave}
             />
         )}
+        {isImportModalOpen && importStatus && (
+            <ImportStatusModal status={importStatus} onClose={() => setIsImportModalOpen(false)} />
+        )}
+        <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".csv" style={{ display: 'none' }} />
+
         <aside 
             className={`bg-gray-100 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col transition-all duration-200 ${isSidebarCollapsed ? 'p-2' : 'p-4'}`}
             style={{ width: isSidebarCollapsed ? '48px' : `${sidebarWidth}px` }}
@@ -487,6 +772,7 @@ const TestLibraryView: React.FC = () => {
                         onDeleteFolder={handleDeleteFolder}
                         expandedFolders={expandedFolders}
                         onToggleFolder={toggleFolder}
+                        canEdit={permissions.canEditLibrary}
                     />
                 </div>
             )}
@@ -494,7 +780,7 @@ const TestLibraryView: React.FC = () => {
 
         {!isSidebarCollapsed && (
              <div 
-                className="w-1.5 cursor-col-resize bg-gray-200 dark:bg-gray-800 hover:bg-blue-accent flex-shrink-0"
+                className={`w-1.5 flex-shrink-0 ${permissions.canEditLibrary ? 'cursor-col-resize bg-gray-200 dark:bg-gray-800 hover:bg-blue-accent' : ''}`}
                 onMouseDown={handleMouseDown}
             />
         )}
@@ -519,23 +805,41 @@ const TestLibraryView: React.FC = () => {
                         <span>Show Archived</span>
                     </label>
                 </div>
-                <div className="flex items-center space-x-2">
-                    {selectedTestIds.size > 0 && (
-                        <button 
-                            onClick={() => setIsBulkEditModalOpen(true)}
-                            className="px-3 py-1.5 text-sm rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
+                {permissions.canEditLibrary && (
+                    <div className="flex items-center space-x-2">
+                        {selectedTestIds.size > 0 && (
+                            <button 
+                                onClick={() => setIsBulkEditModalOpen(true)}
+                                className="px-3 py-1.5 text-sm rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
+                            >
+                                Bulk Edit ({selectedTestIds.size})
+                            </button>
+                        )}
+                         <button 
+                            onClick={handleImportClick}
+                            title="Import tests from a CSV file"
+                            className="flex items-center text-sm px-3 py-1.5 rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
                         >
-                            Bulk Edit ({selectedTestIds.size})
+                            <UploadIcon className="w-4 h-4 mr-2" />
+                            Import
                         </button>
-                    )}
-                    <button 
-                        onClick={() => setEditingTest({})}
-                        className="flex items-center bg-blue-accent text-white px-4 py-1.5 rounded-md hover:bg-blue-600 transition-colors"
-                    >
-                        <PlusIcon className="w-5 h-5 mr-2" />
-                        New Test
-                    </button>
-                </div>
+                        <button 
+                            onClick={handleExportCSV}
+                            title="Export all tests to a CSV file"
+                            className="flex items-center text-sm px-3 py-1.5 rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
+                        >
+                            <DownloadIcon className="w-4 h-4 mr-2" />
+                            Export
+                        </button>
+                        <button 
+                            onClick={() => setEditingTest({})}
+                            className="flex items-center bg-blue-accent text-white px-4 py-1.5 rounded-md hover:bg-blue-600 transition-colors"
+                        >
+                            <PlusIcon className="w-5 h-5 mr-2" />
+                            New Test
+                        </button>
+                    </div>
+                )}
             </header>
             <TestList 
                 tests={filteredTests}
@@ -544,6 +848,7 @@ const TestLibraryView: React.FC = () => {
                 selectedTestIds={selectedTestIds}
                 onSelectTest={handleSelectTest}
                 onSelectAllTests={handleSelectAllTests}
+                canEdit={permissions.canEditLibrary}
             />
         </main>
     </div>

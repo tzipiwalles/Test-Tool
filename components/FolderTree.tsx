@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Folder } from '../types';
 import FolderTreeItem from './FolderTreeItem';
@@ -11,9 +12,10 @@ interface FolderTreeProps {
   onDeleteFolder?: (id: string) => void;
   expandedFolders: Set<string>;
   onToggleFolder: (id: string) => void;
+  canEdit: boolean;
 }
 
-const FolderTree: React.FC<FolderTreeProps> = ({ folders, selectedFolderId, onSelectFolder, onDropTest, onDropFolder, onDeleteFolder, expandedFolders, onToggleFolder }) => {
+const FolderTree: React.FC<FolderTreeProps> = ({ folders, selectedFolderId, onSelectFolder, onDropTest, onDropFolder, onDeleteFolder, expandedFolders, onToggleFolder, canEdit }) => {
   return (
     <div className="space-y-1">
       {folders.map(folder => (
@@ -28,6 +30,7 @@ const FolderTree: React.FC<FolderTreeProps> = ({ folders, selectedFolderId, onSe
             onDeleteFolder={onDeleteFolder}
             expandedFolders={expandedFolders}
             onToggleFolder={onToggleFolder}
+            canEdit={canEdit}
         />
       ))}
     </div>
