@@ -1,5 +1,5 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { BoldIcon, ItalicIcon, UnderlineIcon, ListUnorderedIcon, ListOrderedIcon, ImageIcon, TableIcon } from './icons/editorIcons';
+import React, { useRef, useEffect } from 'react';
+import { BoldIcon, ItalicIcon, UnderlineIcon, ListUnorderedIcon, ListOrderedIcon, ImageIcon, TableIcon, LinkIcon, UnlinkIcon } from './icons/editorIcons';
 
 interface RichTextEditorProps {
   value: string;
@@ -36,9 +36,10 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, disabl
   };
 
   const execCommand = (command: string, value: string | null = null) => {
+    // We focus before executing the command to ensure the selection is in the editor
+    editorRef.current?.focus(); 
     document.execCommand(command, false, value);
-    editorRef.current?.focus();
-    handleInput(); // reflect changes immediately
+    // handleInput() will be called by the onInput event of the div, which is triggered by execCommand
   };
   
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -48,7 +49,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, disabl
       reader.onload = (event) => {
         const base64Image = event.target?.result;
         if (typeof base64Image === 'string') {
-          const imgHtml = `<img src="${base64Image}" style="max-width: 100%; height: auto;" />`;
+          const imgHtml = `<img src="${base64Image}" style="max-width: 100%; height: auto; border-radius: 4px;" />`;
           execCommand('insertHTML', imgHtml);
         }
       };
@@ -56,6 +57,45 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, disabl
     }
   };
   
+  const handleLinkClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+        alert("Please select the text you want to turn into a link.");
+        return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const selectedText = range.toString();
+
+    if (!selectedText || selectedText.trim() === '') {
+        alert("Please select the text you want to turn into a link.");
+        return;
+    }
+    
+    const url = window.prompt("Enter the URL:", "https://");
+    if (url && url.trim() !== '' && url !== 'https://') {
+        const link = document.createElement('a');
+        link.href = url;
+        link.textContent = selectedText;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        
+        range.deleteContents();
+        range.insertNode(link);
+        
+        // Clear selection and place cursor after the link
+        selection.removeAllRanges();
+        const newRange = document.createRange();
+        newRange.setStartAfter(link);
+        newRange.collapse(true);
+        selection.addRange(newRange);
+        
+        handleInput();
+    }
+  };
+
   const insertTable = () => {
       const tableHtml = `<table style="border-collapse: collapse; width: 100%;">
         <tbody>
@@ -73,30 +113,51 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, disabl
   }
 
   return (
-    <div className={`border border-gray-300 dark:border-gray-600 rounded-lg ${disabled ? 'bg-gray-100 dark:bg-gray-800' : 'bg-white dark:bg-gray-700'}`}>
-      {!disabled && (
-        <div className="flex items-center space-x-1 p-2 border-b border-gray-300 dark:border-gray-600 flex-wrap">
-          <EditorButton onClick={() => execCommand('bold')} title="Bold"><BoldIcon className="w-4 h-4" /></EditorButton>
-          <EditorButton onClick={() => execCommand('italic')} title="Italic"><ItalicIcon className="w-4 h-4" /></EditorButton>
-          <EditorButton onClick={() => execCommand('underline')} title="Underline"><UnderlineIcon className="w-4 h-4" /></EditorButton>
-          <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2"></div>
-          <EditorButton onClick={() => execCommand('insertUnorderedList')} title="Bulleted List"><ListUnorderedIcon className="w-4 h-4" /></EditorButton>
-          <EditorButton onClick={() => execCommand('insertOrderedList')} title="Numbered List"><ListOrderedIcon className="w-4 h-4" /></EditorButton>
-          <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2"></div>
-          <EditorButton onClick={() => fileInputRef.current?.click()} title="Insert Image"><ImageIcon className="w-4 h-4" /></EditorButton>
-          <EditorButton onClick={insertTable} title="Insert Table"><TableIcon className="w-4 h-4" /></EditorButton>
-          <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
-        </div>
-      )}
-      <div
-        ref={editorRef}
-        contentEditable={!disabled}
-        onInput={handleInput}
-        className="prose dark:prose-invert max-w-none p-4 min-h-[200px] focus:outline-none overflow-y-auto"
-        style={{ caretColor: 'auto' }}
-        dangerouslySetInnerHTML={{ __html: value }}
-      />
-    </div>
+    <>
+      <style>{`
+        .prose a {
+          color: #3b82f6;
+          text-decoration: underline;
+          cursor: pointer;
+        }
+        .prose a:hover {
+          color: #2563eb;
+        }
+        .dark .prose a {
+          color: #60a5fa;
+        }
+        .dark .prose a:hover {
+          color: #93c5fd;
+        }
+      `}</style>
+      
+      <div className={`border border-gray-300 dark:border-gray-600 rounded-lg ${disabled ? 'bg-gray-100 dark:bg-gray-800' : 'bg-white dark:bg-gray-700'}`}>
+        {!disabled && (
+          <div className="flex items-center space-x-1 p-2 border-b border-gray-300 dark:border-gray-600 flex-wrap">
+            <EditorButton onClick={(e) => { e.preventDefault(); execCommand('bold'); }} title="Bold"><BoldIcon className="w-4 h-4" /></EditorButton>
+            <EditorButton onClick={(e) => { e.preventDefault(); execCommand('italic'); }} title="Italic"><ItalicIcon className="w-4 h-4" /></EditorButton>
+            <EditorButton onClick={(e) => { e.preventDefault(); execCommand('underline'); }} title="Underline"><UnderlineIcon className="w-4 h-4" /></EditorButton>
+            <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2"></div>
+            <EditorButton onClick={(e) => { e.preventDefault(); execCommand('insertUnorderedList'); }} title="Bulleted List"><ListUnorderedIcon className="w-4 h-4" /></EditorButton>
+            <EditorButton onClick={(e) => { e.preventDefault(); execCommand('insertOrderedList'); }} title="Numbered List"><ListOrderedIcon className="w-4 h-4" /></EditorButton>
+            <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2"></div>
+            <EditorButton onClick={handleLinkClick} title="Add Link"><LinkIcon className="w-4 h-4" /></EditorButton>
+            <EditorButton onClick={(e) => { e.preventDefault(); execCommand('unlink'); }} title="Remove Link"><UnlinkIcon className="w-4 h-4" /></EditorButton>
+            <EditorButton onClick={(e) => { e.preventDefault(); fileInputRef.current?.click(); }} title="Insert Image"><ImageIcon className="w-4 h-4" /></EditorButton>
+            <EditorButton onClick={(e) => { e.preventDefault(); insertTable(); }} title="Insert Table"><TableIcon className="w-4 h-4" /></EditorButton>
+            <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
+          </div>
+        )}
+
+        <div
+          ref={editorRef}
+          contentEditable={!disabled}
+          onInput={handleInput}
+          className="prose dark:prose-invert max-w-none p-4 min-h-[200px] focus:outline-none overflow-y-auto"
+          style={{ direction: 'ltr', textAlign: 'left' }}
+        />
+      </div>
+    </>
   );
 };
 

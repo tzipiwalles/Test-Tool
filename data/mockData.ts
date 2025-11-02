@@ -284,7 +284,7 @@ export const mockNotes: Note[] = [
         authorId: 'u-2',
         createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
         updatedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-        content: '<h3>Overall Cycle Status</h3><p>We are seeing some regressions in the <b>Munich</b> map, specifically related to TFLR. Please prioritize investigation.</p>'
+        content: '<h3>Overall Cycle Status</h3><p>We are seeing some regressions in the <b>Munich</b> map. Please see the full report at <a href="https://example.com/munich-report" target="_blank" rel="noopener noreferrer">this link</a> for more details.</p>'
     },
     {
         id: 'n-2',
@@ -302,7 +302,7 @@ export const mockNotes: Note[] = [
         authorId: 'u-3',
         createdAt: new Date(Date.now() - 86400000).toISOString(),
         updatedAt: new Date(Date.now() - 86400000).toISOString(),
-        content: '<p>Detroit V2V runs are complete. SA review is pending.</p><ul><li>V2V Link: [link]</li><li>SA Link: [link]</li></ul>'
+        content: '<p>Detroit V2V runs are complete. SA review is pending.</p>'
     },
 ];
 
