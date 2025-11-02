@@ -12,6 +12,8 @@ import { XCircleIcon } from './icons/XCircleIcon';
 import { StopCircleIcon } from './icons/StopCircleIcon';
 import { ClockIcon } from './icons/ClockIcon';
 import EditableDatalistInput from './EditableDatalistInput';
+import { ExpandAllIcon } from './icons/ExpandAllIcon';
+import { CollapseAllIcon } from './icons/CollapseAllIcon';
 
 const PriorityBadge: React.FC<{ priority: Priority }> = ({ priority }) => {
     const styles = {
@@ -49,6 +51,14 @@ const AddTestsModal: React.FC<{
     }
     return ids;
   }, []);
+
+  const expandAllFolders = useCallback(() => {
+    setExpandedFolders(new Set(folders.map(f => f.id)));
+  }, [folders]);
+
+  const collapseAllFolders = () => {
+      setExpandedFolders(new Set());
+  };
 
   const filteredTests = useMemo(() => {
     let testsToShow = tests;
@@ -117,16 +127,29 @@ const AddTestsModal: React.FC<{
             <h2 className="text-xl font-bold">Add Tests from Library</h2>
         </div>
         <div className="flex-1 flex overflow-hidden">
-          <aside className="w-1/3 border-r border-gray-200 dark:border-gray-700 p-4 overflow-y-auto">
-            <FolderTree
-              folders={folderTreeForNav}
-              selectedFolderId={selectedFolderId}
-              onSelectFolder={setSelectedFolderId}
-              onDropTest={() => {}}
-              onDropFolder={() => {}}
-              expandedFolders={expandedFolders}
-              onToggleFolder={toggleFolder}
-            />
+          <aside className="w-1/3 border-r border-gray-200 dark:border-gray-700 p-4 flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-lg">Folders</h3>
+                <div className="flex items-center">
+                    <button onClick={expandAllFolders} title="Expand All" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white p-1 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700">
+                        <ExpandAllIcon className="w-5 h-5" />
+                    </button>
+                    <button onClick={collapseAllFolders} title="Collapse All" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white p-1 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700">
+                        <CollapseAllIcon className="w-5 h-5" />
+                    </button>
+                </div>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <FolderTree
+                folders={folderTreeForNav}
+                selectedFolderId={selectedFolderId}
+                onSelectFolder={setSelectedFolderId}
+                onDropTest={() => {}}
+                onDropFolder={() => {}}
+                expandedFolders={expandedFolders}
+                onToggleFolder={toggleFolder}
+              />
+            </div>
           </aside>
           <main className="w-2/3 flex flex-col overflow-hidden">
             <div className="p-4 border-b border-gray-200 dark:border-gray-700">
@@ -780,6 +803,7 @@ const CycleBuilder: React.FC<{
                                            </td>
                                        </tr>
                                        {items.map(item => (
+                                         // Fix: Pass correct handler functions
                                          <CycleTestRow key={item.id} item={item} allUsers={allUsers} maps={maps} configurations={configurations} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} />
                                        ))}
                                    </React.Fragment>
@@ -787,6 +811,7 @@ const CycleBuilder: React.FC<{
                            })
                         ) : (
                             itemsInCurrentScope.map(item => (
+                               // Fix: Pass correct handler functions
                                <CycleTestRow key={item.id} item={item} allUsers={allUsers} maps={maps} configurations={configurations} onUpdateItem={handleUpdateItem} onRemoveItem={handleRemoveItem} onSelectItem={handleSelectItem} isSelected={selectedItemIds.has(item.id)} />
                             ))
                         )}
