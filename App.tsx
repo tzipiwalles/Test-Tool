@@ -31,7 +31,7 @@ const App: React.FC = () => {
       <Header />
       <div className="flex flex-1 overflow-hidden">
         <nav className="flex flex-col items-center w-20 bg-gray-100 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 py-4">
-          <div className="text-blue-accent font-bold text-2xl mb-10">C</div>
+          <div className="text-blue-accent font-bold text-2xl mb-10">Q</div>
           <div className="flex flex-col space-y-4">
             {navItems.map((item) => (
               <button

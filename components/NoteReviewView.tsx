@@ -180,13 +180,11 @@ const NoteReviewView: React.FC<{ cycle: Cycle, onBack: () => void }> = ({ cycle,
     };
 
     const handleMapFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        // Fix: Use e.currentTarget instead of e.target to correctly type the event target.
         const options = Array.from(e.currentTarget.selectedOptions, option => option.value);
         setSelectedMaps(options);
     };
 
     const handleAffectedObjectFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        // Fix: Use e.currentTarget instead of e.target to correctly type the event target.
         const options = Array.from(e.currentTarget.selectedOptions, option => option.value);
         setSelectedAffectedObjects(options);
     };

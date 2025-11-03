@@ -614,6 +614,10 @@ const CycleBuilder: React.FC<{
     const cycleScopes = useMemo(() => scopes.filter(s => s.cycleId === cycle.id), [scopes, cycle.id]);
     const [selectedScopeId, setSelectedScopeId] = useState<string | null>(cycleScopes[0]?.id || null);
 
+    const allItemsInCycle = useMemo(() =>
+        cycleItems.filter(item => item.cycleId === cycle.id)
+    , [cycleItems, cycle.id]);
+
     const itemsInCurrentScope = useMemo(() =>
         cycleItems
             .filter(item => item.cycleId === cycle.id && item.scopeId === selectedScopeId)
@@ -655,7 +659,6 @@ const CycleBuilder: React.FC<{
     };
 
     const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        // Fix: Use e.currentTarget instead of e.target to correctly type the event target.
         const { name, value } = e.currentTarget;
         setFilters(prev => ({ ...prev, [name]: value }));
     };
@@ -1048,11 +1051,11 @@ const CycleBuilder: React.FC<{
                     </div>
                     <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
                         <span>
-                            Total Tests: {itemsInCurrentScope.length} 
-                            {isFiltered && ` (${filteredItems.length} shown)`}
+                            Total Tests in Cycle: {allItemsInCycle.length}
+                            {isFiltered && ` (${filteredItems.length} shown in scope)`}
                         </span>
                         <div className="w-1/3">
-                            <CycleProgress items={itemsInCurrentScope} />
+                            <CycleProgress items={allItemsInCycle} />
                         </div>
                     </div>
                 </header>
@@ -1210,27 +1213,42 @@ const CycleBuilder: React.FC<{
                 </div>
 
                 <div className="border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-                    <nav className="-mb-px flex space-x-2 items-center">
-                        {cycleScopes.map(scope => (
-                            <div key={scope.id} onClick={() => setSelectedScopeId(scope.id)} className={`group relative flex items-center cursor-pointer py-3 px-1 border-b-2 ${selectedScopeId === scope.id ? 'border-blue-accent' : 'border-transparent hover:border-gray-300'}`}>
-                            <select
-                                    value={scope.name}
-                                    onChange={(e) => handleUpdateScope(scope.id, { name: e.target.value as ScopeName })}
-                                    onClick={(e) => e.stopPropagation()}
-                                    disabled={!permissions.canEditCycles || isArchived}
-                                    className={`bg-transparent font-medium text-sm focus:outline-none appearance-none cursor-pointer ${selectedScopeId === scope.id ? 'text-blue-accent' : 'text-gray-500 group-hover:text-gray-700 dark:group-hover:text-gray-200'} disabled:text-gray-400 dark:disabled:text-gray-500 disabled:cursor-not-allowed`}
+                    <nav className="-mb-px flex space-x-4 items-end">
+                        {cycleScopes.map(scope => {
+                            const itemsInThisScope = cycleItems.filter(item => item.scopeId === scope.id);
+                            const itemCount = itemsInThisScope.length;
+
+                            return (
+                                <div 
+                                    key={scope.id} 
+                                    onClick={() => setSelectedScopeId(scope.id)} 
+                                    className={`group relative flex flex-col cursor-pointer pt-3 px-2 border-b-2 min-w-[140px] ${selectedScopeId === scope.id ? 'border-blue-accent' : 'border-transparent hover:border-gray-300 dark:hover:border-gray-600'}`}
                                 >
-                                    {Object.values(ScopeName).map(name => <option key={name} value={name}>{name}</option>)}
-                                </select>
-                                {permissions.canEditCycles && cycleScopes.length > 1 && !isArchived && (
-                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteScope(scope.id); }} className="ml-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Delete Scope">
-                                        <TrashIcon className="w-3 h-3"/>
-                                    </button>
-                                )}
-                            </div>
-                        ))}
+                                    <div className="flex items-center mb-1.5">
+                                        <select
+                                            value={scope.name}
+                                            onChange={(e) => handleUpdateScope(scope.id, { name: e.target.value as ScopeName })}
+                                            onClick={(e) => e.stopPropagation()}
+                                            disabled={!permissions.canEditCycles || isArchived}
+                                            className={`bg-transparent font-medium text-sm focus:outline-none appearance-none cursor-pointer ${selectedScopeId === scope.id ? 'text-blue-accent' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-200'} disabled:text-gray-400 dark:disabled:text-gray-500 disabled:cursor-not-allowed`}
+                                        >
+                                            {Object.values(ScopeName).map(name => <option key={name} value={name}>{name}</option>)}
+                                        </select>
+                                        <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">({itemCount})</span>
+                                        {permissions.canEditCycles && cycleScopes.length > 1 && !isArchived && (
+                                            <button onClick={(e) => { e.stopPropagation(); handleDeleteScope(scope.id); }} className="ml-auto text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Delete Scope">
+                                                <TrashIcon className="w-3 h-3"/>
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="w-full mb-1">
+                                        <CycleProgress items={itemsInThisScope} />
+                                    </div>
+                                </div>
+                            );
+                        })}
                         {permissions.canEditCycles && !isArchived && (
-                            <button onClick={handleAddScope} className="flex items-center text-sm text-blue-500 hover:underline py-3 px-1">
+                            <button onClick={handleAddScope} className="flex items-center text-sm text-blue-500 hover:underline mb-2 px-2">
                                 <PlusIcon className="w-4 h-4 mr-1" /> Add Scope
                             </button>
                         )}

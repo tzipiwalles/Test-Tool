@@ -1,5 +1,5 @@
 {
-  "name": "Catalyst Test Runner - some user profile",
+  "name": "QualityLane",
   "description": "A lightweight internal web app for managing tests and reporting execution results. It provides a simple, fast, and uncluttered interface for managing test libraries and executing test cycles with drag-and-drop functionality.",
   "requestFramePermissions": []
 }

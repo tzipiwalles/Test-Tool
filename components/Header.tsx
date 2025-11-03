@@ -4,6 +4,7 @@ import { useData } from './DataContext';
 import { UserIcon } from './icons/UserIcon';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
 import { User, UserRole } from '../types';
+import { LogoIcon } from './icons/LogoIcon';
 
 const getRoleName = (role: UserRole) => {
     switch (role) {
@@ -54,9 +55,9 @@ const Header: React.FC = () => {
 
   return (
     <header className="flex-shrink-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 h-16 flex items-center justify-between px-6">
-        <div>
-            {/* Can add breadcrumbs or other context here later */}
-            <h1 className="text-xl font-semibold text-gray-800 dark:text-gray-100">Catalyst Test Runner</h1>
+        <div className="flex items-center space-x-2">
+            <LogoIcon className="h-8 w-8 text-blue-accent" />
+            <h1 className="text-xl font-semibold text-gray-800 dark:text-gray-100">QualityLane</h1>
         </div>
         <div className="relative" ref={dropdownRef}>
             <button 

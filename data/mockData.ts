@@ -10,8 +10,7 @@ export const mockUsers: User[] = [
   { id: 'u-6', displayName: 'Yael R', email: 'yaelr@example.com', role: UserRole.ANALYST },
   { id: 'u-7', displayName: 'Tal A', email: 'tal.a@example.com', role: UserRole.MAINTAINER },
   { id: 'u-8', displayName: 'Tamar B', email: 'tamarb@example.com', role: UserRole.ANALYST },
-  { id: 'u-9', displayName: 'Alex N', email: 'Alexn@example.com', role: UserRole.ANALYST },
-
+  { id: 'u-9', displayName: 'Alex N', email: 'Alexn@example.com', role: UserRole.ANALYST }
 ];
 
 
@@ -135,7 +134,7 @@ Document and save in Jira the statistical records and review priority before con
       estimated_duration_sec: 3600,
       updatedAt: '7/20/2024',
       updatedBy: 'Yogev M',
-    },
+    }
 ];
 
 // CYCLES
@@ -175,7 +174,7 @@ export const mockCycles: Cycle[] = [
     version: '24.10.4.0',
     refVersion: '24.10.3.2',
     cycleType: CycleType.NEW_FEATURE,
-  },
+  }
 ];
 
 // SCOPES
@@ -313,7 +312,7 @@ export const mockCycleItems: CycleItem[] = [
         updatedAt: '7/26/2024',
         map: 'Munich',
         configurations: ['Const-Data']
-    },
+    }
 ];
 
 // NOTES

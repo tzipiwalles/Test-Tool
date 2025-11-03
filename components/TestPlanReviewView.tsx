@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Test, Priority, TestStep } from '../types';
 import { useData } from './DataContext';
@@ -24,7 +23,6 @@ const PriorityBadge: React.FC<{ priority: Priority }> = ({ priority }) => {
     return <span className={`px-2 py-0.5 text-xs font-semibold text-white rounded-full border ${styles[priority]}`}>{priority}</span>
 }
 
-// Fix: The 'title' prop is not a valid SVG attribute for React's SVG elements. It has been replaced with a <title> child element for proper SVG accessibility and to provide a tooltip.
 const ReviewStatusIcon: React.FC<{ status: ReviewStatus }> = ({ status }) => {
     switch (status) {
         case 'approved':
