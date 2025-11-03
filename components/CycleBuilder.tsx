@@ -655,7 +655,8 @@ const CycleBuilder: React.FC<{
     };
 
     const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
+        // Fix: Use e.currentTarget instead of e.target to correctly type the event target.
+        const { name, value } = e.currentTarget;
         setFilters(prev => ({ ...prev, [name]: value }));
     };
     

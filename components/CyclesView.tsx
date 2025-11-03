@@ -1,11 +1,14 @@
-import React, { useState, useMemo } from 'react';
-import { Cycle, CycleItem, CycleItemResult, CycleStatus, Scope, ScopeName } from '../types';
+
+import React, { useState, useMemo, useRef } from 'react';
+import { Cycle, CycleItem, CycleItemResult, CycleStatus, Scope, ScopeName, Test } from '../types';
 import CycleBuilder from './CycleBuilder';
 import { PlusIcon } from './icons/PlusIcon';
 import { useData } from './DataContext';
 import { CopyIcon } from './icons/CopyIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
+import { UploadIcon } from './icons/UploadIcon';
+import { ExportIcon } from './icons/ExportIcon';
 
 const ConfirmationModal: React.FC<{
   title: string;
@@ -53,6 +56,30 @@ const ConfirmationModal: React.FC<{
     </div>
   );
 };
+
+// A generic Modal component for reuse within this view
+const Modal: React.FC<{ children: React.ReactNode; onClose: () => void; title: string }> = ({ children, onClose, title }) => (
+  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onMouseDown={onClose}>
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-2xl text-gray-900 dark:text-white" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-bold">{title}</h2>
+        <button onClick={onClose} className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">&times;</button>
+      </div>
+      {children}
+    </div>
+  </div>
+);
+
+const ImportStatusModal: React.FC<{ status: { message: string, error?: boolean }; onClose: () => void; }> = ({ status, onClose }) => (
+  <Modal onClose={onClose} title="Import Status">
+    <div className={`p-4 rounded-md ${status.error ? 'bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-200' : 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200'}`}>
+        <p className="whitespace-pre-wrap">{status.message}</p>
+    </div>
+    <div className="flex justify-end mt-4">
+        <button onClick={onClose} className="px-4 py-2 rounded-md bg-blue-accent hover:bg-blue-600 text-white">Close</button>
+    </div>
+  </Modal>
+);
 
 const NewCycleModal: React.FC<{ onClose: () => void; onCreate: (data: { name: string; description: string; labels: string }) => void; }> = ({ onClose, onCreate }) => {
     const [name, setName] = useState('');
@@ -132,11 +159,14 @@ const CycleProgress: React.FC<{ items: CycleItem[] }> = ({ items }) => {
 
 
 const CyclesView: React.FC = () => {
-  const { cycles, setCycles, cycleItems, setCycleItems, scopes, setScopes, permissions } = useData();
+  const { cycles, setCycles, cycleItems, setCycleItems, scopes, setScopes, permissions, users, tests } = useData();
   const [selectedCycle, setSelectedCycle] = useState<Cycle | null>(null);
   const [isNewCycleModalOpen, setIsNewCycleModalOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [archivingCycle, setArchivingCycle] = useState<Cycle | null>(null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importStatus, setImportStatus] = useState<{message: string, error?: boolean} | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleCreateCycle = (cycleData: { name: string; description: string; labels: string }) => {
     const newCycle: Cycle = {
@@ -239,6 +269,242 @@ const CyclesView: React.FC = () => {
         .filter(cycle => showArchived ? true : cycle.status !== CycleStatus.ARCHIVED)
         .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   }, [cycles, showArchived]);
+  
+  const handleExportCycleCSV = (cycle: Cycle) => {
+    const headers = [
+      'cycle_name', 'cycle_description', 'cycle_labels', 'cycle_version', 'cycle_refVersion', 'cycle_type',
+      'scope_name',
+      'test_id', 'snapshot_name', 'snapshot_steps', 'snapshot_labels', 'snapshot_affectedObjectType', 'snapshot_testMethod',
+      'assignee_email', 'result', 'item_map', 'item_configurations'
+    ];
+
+    const escapeCSV = (str: string | number | null | undefined): string => {
+        const s = String(str ?? '');
+        if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+            return `"${s.replace(/"/g, '""')}"`;
+        }
+        return s;
+    };
+    
+    const cycleScopes = scopes.filter(s => s.cycleId === cycle.id);
+    const cycleItemsForExport = cycleItems.filter(item => item.cycleId === cycle.id);
+
+    const rows = cycleItemsForExport.map(item => {
+        const scope = cycleScopes.find(s => s.id === item.scopeId);
+        const assignee = users.find(u => u.id === item.assigneeId);
+        
+        const stepsString = item.testSnapshot.steps.map(s => `${s.action || ''}||${s.expected || ''}`).join('@@');
+
+        return [
+            cycle.name, cycle.description, (cycle.labels || []).join(','), cycle.version, cycle.refVersion, cycle.cycleType,
+            scope?.name || ScopeName.NONE,
+            item.testId, item.testSnapshot.name, stepsString, (item.testSnapshot.labels || []).join(','), item.testSnapshot.affectedObjectType, item.testSnapshot.testMethod,
+            assignee?.email || '', item.result, item.map, (item.configurations || []).join(',')
+        ].map(escapeCSV).join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    const date = new Date().toISOString().split('T')[0];
+    const safeCycleName = cycle.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    link.setAttribute("download", `catalyst_cycle_${safeCycleName}_${date}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+  
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      setIsImportModalOpen(true);
+      setImportStatus({ message: "Reading and parsing file..." });
+
+      try {
+        const csvText = await file.text();
+        processCycleCSVData(csvText);
+      } catch (error) {
+          setImportStatus({ message: `Error reading file: ${error instanceof Error ? error.message : String(error)}`, error: true });
+      } finally {
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      }
+  };
+
+  const processCycleCSVData = (csvText: string) => {
+    const parseCsv = (text: string): string[][] => {
+        const rows: string[][] = [];
+        let currentRow: string[] = [];
+        let field = '';
+        let inQuotes = false;
+
+        text = text.replace(/\r\n/g, '\n');
+
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            if (inQuotes) {
+                if (char === '"') {
+                    if (i + 1 < text.length && text[i + 1] === '"') {
+                        field += '"';
+                        i++; // Skip escaped quote
+                    } else {
+                        inQuotes = false;
+                    }
+                } else {
+                    field += char;
+                }
+            } else {
+                if (char === '"') {
+                    if (field === '') { inQuotes = true; } 
+                    else { field += char; }
+                } else if (char === ',') {
+                    currentRow.push(field);
+                    field = '';
+                } else if (char === '\n') {
+                    currentRow.push(field);
+                    rows.push(currentRow);
+                    currentRow = [];
+                    field = '';
+                } else {
+                    field += char;
+                }
+            }
+        }
+        if (field || currentRow.length > 0) {
+            currentRow.push(field);
+            rows.push(currentRow);
+        }
+        return rows;
+    };
+
+    const parsedRows = parseCsv(csvText);
+    const nonEmptyRows = parsedRows.filter(row => row.length > 1 || (row.length === 1 && row[0] !== ''));
+
+    if (nonEmptyRows.length < 1) {
+        setImportStatus({ message: "CSV file is empty or has no header.", error: true });
+        return;
+    }
+    
+    const headerRow = nonEmptyRows.shift();
+    if (!headerRow) {
+      setImportStatus({ message: "CSV file has no header.", error: true });
+      return;
+    }
+    const headers = headerRow.map(h => h.trim());
+
+    const requiredHeaders = ['cycle_name', 'scope_name', 'test_id'];
+    if (!requiredHeaders.every(h => headers.includes(h))) {
+        setImportStatus({ message: `CSV is missing required headers. Required: ${requiredHeaders.join(', ')}`, error: true });
+        return;
+    }
+
+    if (nonEmptyRows.length === 0) {
+      setImportStatus({ message: "CSV has headers but no data rows.", error: true });
+      return;
+    }
+    
+    const firstRow = headers.reduce((obj, key, i) => ({...obj, [key]: (nonEmptyRows[0][i] || '').trim() }), {} as Record<string, string>);
+
+    const newCycle: Cycle = {
+      id: `c-${Date.now()}`,
+      name: `[IMPORT] ${firstRow.cycle_name || 'Untitled Cycle'}`,
+      description: firstRow.cycle_description || '',
+      labels: (firstRow.cycle_labels || '').split(',').map(l => l.trim()).filter(Boolean),
+      status: CycleStatus.DRAFT,
+      updatedAt: new Date().toLocaleDateString(),
+      version: firstRow.cycle_version,
+      refVersion: firstRow.cycle_refVersion,
+      cycleType: firstRow.cycle_type as any,
+    };
+    
+    const newScopes: Scope[] = [];
+    const newCycleItems: CycleItem[] = [];
+    const scopeNameToIdMap = new Map<string, string>();
+    let errors: string[] = [];
+    let itemsSkipped = 0;
+
+    nonEmptyRows.forEach((values, index) => {
+      const row = headers.reduce((obj, key, i) => ({...obj, [key]: (values[i] || '').trim() }), {} as Record<string, string>);
+
+      if (!row.test_id) {
+        errors.push(`Row ${index + 2}: Missing required field 'test_id'. Skipping row.`);
+        itemsSkipped++;
+        return;
+      }
+      
+      const test = tests.find(t => t.id === row.test_id);
+      if (!test) {
+        errors.push(`Row ${index + 2}: Test with ID "${row.test_id}" not found in library. Skipping item.`);
+        itemsSkipped++;
+        return;
+      }
+
+      let scopeId: string;
+      const scopeName = (row.scope_name as ScopeName) || ScopeName.NONE;
+      if (scopeNameToIdMap.has(scopeName)) {
+        scopeId = scopeNameToIdMap.get(scopeName)!;
+      } else {
+        const newScope: Scope = {
+          id: `s-${Date.now()}-${newScopes.length}`,
+          cycleId: newCycle.id,
+          name: scopeName,
+        };
+        newScopes.push(newScope);
+        scopeId = newScope.id;
+        scopeNameToIdMap.set(scopeName, scopeId);
+      }
+      
+      const assignee = users.find(u => u.email === row.assignee_email);
+
+      const newItem: CycleItem = {
+          id: `ci-${Date.now()}-${row.test_id}-${index}`,
+          cycleId: newCycle.id,
+          scopeId: scopeId,
+          testId: row.test_id,
+          testSnapshot: {
+            name: test.name,
+            steps: test.steps,
+            labels: test.labels,
+            affectedObjectType: test.affectedObjectType,
+            testMethod: test.testMethod,
+          },
+          assigneeId: assignee?.id || null,
+          result: (row.result as CycleItemResult) || CycleItemResult.NOT_RUN,
+          updatedAt: new Date().toLocaleDateString(),
+          map: row.item_map || null,
+          configurations: (row.item_configurations || '').split(',').map(c => c.trim()).filter(Boolean),
+      };
+      newCycleItems.push(newItem);
+    });
+
+    if (errors.length > 5) {
+      setImportStatus({ message: `Import failed with too many errors (${errors.length}). Please check your file. First 5 errors:\n${errors.slice(0, 5).join('\n')}`, error: true });
+      return;
+    }
+    
+    setCycles(prev => [newCycle, ...prev]);
+    setScopes(prev => [...prev, ...newScopes]);
+    setCycleItems(prev => [...prev, ...newCycleItems]);
+
+    let message = `Import successful!\n- 1 cycle created: "${newCycle.name}"\n- ${newScopes.length} scopes created.\n- ${newCycleItems.length} tests added.`;
+    if(itemsSkipped > 0) {
+      message += `\n- ${itemsSkipped} items were skipped.`;
+    }
+    if (errors.length > 0) {
+      message += `\n\nWarnings:\n${errors.join('\n')}`;
+    }
+    setImportStatus({ message });
+  };
+
 
   if (selectedCycle) {
     return (
@@ -253,6 +519,10 @@ const CyclesView: React.FC = () => {
   return (
     <div className="p-6 h-full flex flex-col">
       {isNewCycleModalOpen && <NewCycleModal onClose={() => setIsNewCycleModalOpen(false)} onCreate={handleCreateCycle} />}
+      {isImportModalOpen && importStatus && (
+        <ImportStatusModal status={importStatus} onClose={() => setIsImportModalOpen(false)} />
+      )}
+      <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".csv" style={{ display: 'none' }} />
       {archivingCycle && (
         <ConfirmationModal
             title="Archive Cycle"
@@ -276,6 +546,15 @@ const CyclesView: React.FC = () => {
                 <span>Show Archived</span>
             </label>
             {permissions.canCreateCycles && (
+              <div className="flex items-center space-x-2">
+                 <button 
+                    onClick={handleImportClick}
+                    title="Import cycle from a CSV file"
+                    className="flex items-center text-sm px-3 py-1.5 rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
+                >
+                    <UploadIcon className="w-4 h-4 mr-2" />
+                    Import
+                </button>
                 <button 
                 onClick={() => setIsNewCycleModalOpen(true)}
                 className="flex items-center bg-blue-accent text-white px-4 py-1.5 rounded-md hover:bg-blue-600 transition-colors"
@@ -283,6 +562,7 @@ const CyclesView: React.FC = () => {
                 <PlusIcon className="w-5 h-5 mr-2" />
                 New Cycle
                 </button>
+              </div>
             )}
         </div>
       </header>
@@ -310,6 +590,16 @@ const CyclesView: React.FC = () => {
                 <td className="p-3 text-gray-500 dark:text-gray-400">{cycle.updatedAt}</td>
                 <td className="p-3 text-right">
                     <div className="flex items-center justify-end space-x-1">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleExportCycleCSV(cycle);
+                            }}
+                            title="Export Cycle"
+                            className="p-1.5 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white"
+                        >
+                            <ExportIcon className="w-5 h-5" />
+                        </button>
                         {permissions.canCreateCycles && cycle.status !== CycleStatus.ARCHIVED && (
                             <button
                                 onClick={(e) => {
