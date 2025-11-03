@@ -25,6 +25,135 @@ import { PlayIcon } from './icons/PlayIcon';
 import { CopyIcon } from './icons/CopyIcon';
 import { EditIcon } from './icons/EditIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
+import { LinkIcon } from './icons/editorIcons';
+import { UploadIcon } from './icons/UploadIcon';
+import { ExportIcon } from './icons/ExportIcon';
+
+// A generic Modal component for reuse within this view
+const Modal: React.FC<{ children: React.ReactNode; onClose: () => void; title: string }> = ({ children, onClose, title }) => (
+  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onMouseDown={onClose}>
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-2xl text-gray-900 dark:text-white" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-bold">{title}</h2>
+        <button onClick={onClose} className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">&times;</button>
+      </div>
+      {children}
+    </div>
+  </div>
+);
+
+const ImportStatusModal: React.FC<{ status: { message: string, error?: boolean }; onClose: () => void; }> = ({ status, onClose }) => (
+  <Modal onClose={onClose} title="Import Status">
+    <div className={`p-4 rounded-md ${status.error ? 'bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-200' : 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200'}`}>
+        <p className="whitespace-pre-wrap">{status.message}</p>
+    </div>
+    <div className="flex justify-end mt-4">
+        <button onClick={onClose} className="px-4 py-2 rounded-md bg-blue-accent hover:bg-blue-600 text-white">Close</button>
+    </div>
+  </Modal>
+);
+
+const EditableLink: React.FC<{
+  value: string | undefined;
+  onChange: (value: string) => void;
+  disabled: boolean;
+}> = ({ value, onChange, disabled }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [editValue, setEditValue] = useState(value || '');
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        setEditValue(value || '');
+    }, [value]);
+    
+    useEffect(() => {
+        if (isEditing) {
+            inputRef.current?.focus();
+            inputRef.current?.select();
+        }
+    }, [isEditing]);
+
+    const handleSave = () => {
+        if (value !== editValue) {
+            onChange(editValue);
+        }
+        setIsEditing(false);
+    };
+
+    const handleCancel = () => {
+        setEditValue(value || '');
+        setIsEditing(false);
+    };
+
+    const getUrlHostname = (url: string | undefined): string | null => {
+        if (!url) return null;
+        try {
+            // Prepend https:// if no protocol is present, as URL constructor requires it.
+            const fullUrl = url.startsWith('http://') || url.startsWith('https://') ? url : `https://${url}`;
+            const urlObject = new URL(fullUrl);
+            // Return hostname, removing 'www.' if it exists for brevity
+            return urlObject.hostname.replace(/^www\./, '');
+        } catch (error) {
+            // If it's not a valid URL, return a truncated version of the original string.
+            return url.length > 30 ? `${url.substring(0, 27)}...` : url;
+        }
+    };
+    const displayUrl = getUrlHostname(value);
+
+
+    if (disabled) {
+        return value ? (
+            <div className="min-h-[30px] flex items-center">
+                <a href={value} target="_blank" rel="noopener noreferrer" className="flex items-center space-x-2 text-blue-500 dark:text-blue-400 hover:underline truncate" title={value}>
+                    <LinkIcon className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate">{displayUrl || value}</span>
+                </a>
+            </div>
+        ) : (
+             <div className="min-h-[30px] flex items-center">
+                <span className="text-gray-400 dark:text-gray-500 italic">No link</span>
+            </div>
+        );
+    }
+
+    if (isEditing) {
+        return (
+            <div className="flex items-center space-x-1">
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onBlur={handleSave}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSave();
+                        if (e.key === 'Escape') handleCancel();
+                    }}
+                    className="w-full text-sm bg-white dark:bg-gray-800 border border-blue-accent rounded-md px-2 py-1"
+                />
+            </div>
+        );
+    }
+
+    return (
+        <div 
+            className="group flex items-center justify-between w-full cursor-pointer min-h-[30px]" 
+            onClick={() => setIsEditing(true)}
+        >
+            {value ? (
+                <a href={value} onClick={(e) => e.stopPropagation()} target="_blank" rel="noopener noreferrer" className="flex items-center space-x-2 flex-1 text-blue-500 dark:text-blue-400 hover:underline truncate" title={value}>
+                    <LinkIcon className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate">{displayUrl || value}</span>
+                </a>
+            ) : (
+                <span className="flex-1 text-gray-400 dark:text-gray-500 italic">Add link...</span>
+            )}
+            <button onClick={(e) => { e.stopPropagation(); setIsEditing(true); }} className="p-1 rounded-md text-gray-400 opacity-0 group-hover:opacity-100 focus-within:opacity-100 hover:bg-gray-200 dark:hover:bg-gray-700 focus:opacity-100">
+                <EditIcon className="w-4 h-4" />
+            </button>
+        </div>
+    );
+};
 
 const ConfirmationModal: React.FC<{
   title: string;
@@ -646,6 +775,10 @@ const CycleBuilder: React.FC<{
     const [isPinnedNoteVisible, setIsPinnedNoteVisible] = useState(true);
     const [isEditingName, setIsEditingName] = useState(false);
     const [scopeToDelete, setScopeToDelete] = useState<Scope | null>(null);
+    
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [importStatus, setImportStatus] = useState<{message: string, error?: boolean} | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const isArchived = editingCycle.status === CycleStatus.ARCHIVED;
 
@@ -981,6 +1114,144 @@ const CycleBuilder: React.FC<{
         setLastSelectedItemId(null);
     };
 
+    const handleExportMapsCSV = () => {
+        const headers: (keyof Omit<CycleMapInfo, 'id'>)[] = ['mapName', 'mainMapLink', 'refMapLink', 'mainSA', 'refSA', 'v2vMapsLink', 'v2vProbes', 'gtProbes', 'comment'];
+        
+        const escapeCSV = (str: string | number | null | undefined): string => {
+            const s = String(str ?? '');
+            if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+                return `"${s.replace(/"/g, '""')}"`;
+            }
+            return s;
+        };
+        
+        const rows = (editingCycle.mapsInfo || []).map(info => {
+            return headers.map(header => escapeCSV(info[header])).join(',');
+        });
+    
+        const csvContent = [headers.join(','), ...rows].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        const date = new Date().toISOString().split('T')[0];
+        const safeCycleName = cycle.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        link.setAttribute("download", `maps_and_tools_${safeCycleName}_${date}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const handleImportMapsClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleMapsFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsImportModalOpen(true);
+        setImportStatus({ message: "Reading and parsing CSV file..." });
+
+        try {
+            const csvText = await file.text();
+            processMapsCSVData(csvText);
+        } catch (error) {
+            setImportStatus({ message: `Error reading file: ${error instanceof Error ? error.message : String(error)}`, error: true });
+        } finally {
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+            }
+        }
+    };
+    
+    const processMapsCSVData = (csvText: string) => {
+        const parseCsv = (text: string): string[][] => {
+            const rows: string[][] = [];
+            let currentRow: string[] = [];
+            let field = '';
+            let inQuotes = false;
+    
+            text = text.replace(/\r\n/g, '\n');
+    
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                if (inQuotes) {
+                    if (char === '"') {
+                        if (i + 1 < text.length && text[i + 1] === '"') {
+                            field += '"';
+                            i++;
+                        } else {
+                            inQuotes = false;
+                        }
+                    } else {
+                        field += char;
+                    }
+                } else {
+                    if (char === '"') {
+                        if (field === '') inQuotes = true;
+                        else field += char;
+                    } else if (char === ',') {
+                        currentRow.push(field);
+                        field = '';
+                    } else if (char === '\n') {
+                        currentRow.push(field);
+                        rows.push(currentRow);
+                        currentRow = [];
+                        field = '';
+                    } else {
+                        field += char;
+                    }
+                }
+            }
+            if (field || currentRow.length > 0) {
+                currentRow.push(field);
+                rows.push(currentRow);
+            }
+            return rows;
+        };
+    
+        const parsedRows = parseCsv(csvText);
+        const nonEmptyRows = parsedRows.filter(row => row.length > 1 || (row.length === 1 && row[0] !== ''));
+    
+        if (nonEmptyRows.length < 1) {
+            setImportStatus({ message: "CSV file is empty or has no header.", error: true });
+            return;
+        }
+        
+        const headerRow = nonEmptyRows.shift();
+        if (!headerRow) {
+          setImportStatus({ message: "CSV file has no header.", error: true });
+          return;
+        }
+        const headers = headerRow.map(h => h.trim());
+        const expectedHeaders: (keyof Omit<CycleMapInfo, 'id'>)[] = ['mapName', 'mainMapLink', 'refMapLink', 'mainSA', 'refSA', 'v2vMapsLink', 'v2vProbes', 'gtProbes', 'comment'];
+        
+        if (!headers.includes('mapName')) {
+            setImportStatus({ message: `CSV is missing required header: 'mapName'`, error: true });
+            return;
+        }
+    
+        const newMapsInfo: CycleMapInfo[] = nonEmptyRows.map((values, index) => {
+            const rowData = headers.reduce((obj, key, i) => {
+                // Only include expected headers
+                if (expectedHeaders.includes(key as any)) {
+                    obj[key] = (values[i] || '').trim();
+                }
+                return obj;
+            }, {} as Record<string, string>);
+    
+            return {
+                id: `mi-${Date.now()}-${index}`,
+                ...rowData,
+            } as CycleMapInfo;
+        });
+    
+        setEditingCycle(prev => ({ ...prev, mapsInfo: newMapsInfo }));
+        setImportStatus({ message: `Import successful! ${newMapsInfo.length} rows imported. Remember to click 'Save Cycle' to persist changes.` });
+    };
+
     const allUsers = useMemo(() => [{ id: '', displayName: 'Unassigned', email: '', role: UserRole.VIEWER }, ...users], [users]);
     
     const existingTestCountsInScope = useMemo(() => {
@@ -1011,6 +1282,10 @@ const CycleBuilder: React.FC<{
 
     return (
         <div className="flex h-full overflow-hidden">
+             {isImportModalOpen && importStatus && (
+                <ImportStatusModal status={importStatus} onClose={() => setIsImportModalOpen(false)} />
+            )}
+            <input type="file" ref={fileInputRef} onChange={handleMapsFileChange} accept=".csv" style={{ display: 'none' }} />
              {scopeToDelete && (
                 <ConfirmationModal
                     title="Delete Scope"
@@ -1201,15 +1476,26 @@ const CycleBuilder: React.FC<{
                                 <ChevronRightIcon className="w-5 h-5 mr-2 transition-transform duration-200 group-open:rotate-90" />
                                 <span>Maps and Tools</span>
                                 {permissions.canEditCycles && !isArchived && (
-                                    <button 
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            setIsManageMapsModalOpen(true);
-                                        }}
-                                        className="ml-4 text-xs px-2 py-0.5 rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
-                                    >
-                                        Manage
-                                    </button>
+                                    <div className="ml-4 flex items-center space-x-2">
+                                        <button 
+                                            onClick={(e) => { e.preventDefault(); handleImportMapsClick(); }}
+                                            className="text-xs px-2 py-0.5 rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 flex items-center" title="Import from CSV"
+                                        >
+                                            <UploadIcon className="w-3 h-3 mr-1" /> Import
+                                        </button>
+                                        <button 
+                                            onClick={(e) => { e.preventDefault(); handleExportMapsCSV(); }}
+                                            className="text-xs px-2 py-0.5 rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 flex items-center" title="Export to CSV"
+                                        >
+                                            <ExportIcon className="w-3 h-3 mr-1" /> Export
+                                        </button>
+                                         <button 
+                                            onClick={(e) => { e.preventDefault(); setIsManageMapsModalOpen(true); }}
+                                            className="text-xs px-2 py-0.5 rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
+                                        >
+                                            Manage
+                                        </button>
+                                    </div>
                                 )}
                             </div>
                             <span className="text-sm font-normal text-gray-500 dark:text-gray-400 truncate group-open:hidden">
@@ -1246,13 +1532,13 @@ const CycleBuilder: React.FC<{
                                                         </div>
                                                     </td>
                                                     <td className="p-1 align-top"><EditableDatalistInput value={info.mapName} onChange={(val) => handleMapsInfoChange(info.id, 'mapName', val || '')} options={maps} inputClassName="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800" /></td>
-                                                    <td className="p-1 align-top"><input type="text" value={info.mainMapLink || ''} onChange={(e) => handleMapsInfoChange(info.id, 'mainMapLink', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
-                                                    <td className="p-1 align-top"><input type="text" value={info.refMapLink || ''} onChange={(e) => handleMapsInfoChange(info.id, 'refMapLink', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
-                                                    <td className="p-1 align-top"><input type="text" value={info.mainSA || ''} onChange={(e) => handleMapsInfoChange(info.id, 'mainSA', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
-                                                    <td className="p-1 align-top"><input type="text" value={info.refSA || ''} onChange={(e) => handleMapsInfoChange(info.id, 'refSA', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
-                                                    <td className="p-1 align-top"><input type="text" value={info.v2vMapsLink || ''} onChange={(e) => handleMapsInfoChange(info.id, 'v2vMapsLink', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
-                                                    <td className="p-1 align-top"><input type="text" value={info.v2vProbes || ''} onChange={(e) => handleMapsInfoChange(info.id, 'v2vProbes', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
-                                                    <td className="p-1 align-top"><input type="text" value={info.gtProbes || ''} onChange={(e) => handleMapsInfoChange(info.id, 'gtProbes', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
+                                                    <td className="p-1 align-top"><EditableLink value={info.mainMapLink} onChange={(val) => handleMapsInfoChange(info.id, 'mainMapLink', val)} disabled={!permissions.canEditCycles || isArchived} /></td>
+                                                    <td className="p-1 align-top"><EditableLink value={info.refMapLink} onChange={(val) => handleMapsInfoChange(info.id, 'refMapLink', val)} disabled={!permissions.canEditCycles || isArchived} /></td>
+                                                    <td className="p-1 align-top"><EditableLink value={info.mainSA} onChange={(val) => handleMapsInfoChange(info.id, 'mainSA', val)} disabled={!permissions.canEditCycles || isArchived} /></td>
+                                                    <td className="p-1 align-top"><EditableLink value={info.refSA} onChange={(val) => handleMapsInfoChange(info.id, 'refSA', val)} disabled={!permissions.canEditCycles || isArchived} /></td>
+                                                    <td className="p-1 align-top"><EditableLink value={info.v2vMapsLink} onChange={(val) => handleMapsInfoChange(info.id, 'v2vMapsLink', val)} disabled={!permissions.canEditCycles || isArchived} /></td>
+                                                    <td className="p-1 align-top"><EditableLink value={info.v2vProbes} onChange={(val) => handleMapsInfoChange(info.id, 'v2vProbes', val)} disabled={!permissions.canEditCycles || isArchived} /></td>
+                                                    <td className="p-1 align-top"><EditableLink value={info.gtProbes} onChange={(val) => handleMapsInfoChange(info.id, 'gtProbes', val)} disabled={!permissions.canEditCycles || isArchived} /></td>
                                                     <td className="p-1 align-top"><input type="text" value={info.comment || ''} onChange={(e) => handleMapsInfoChange(info.id, 'comment', e.target.value)} className="w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 disabled:bg-gray-100 dark:disabled:bg-gray-800"/></td>
                                                 </tr>
                                             ))}

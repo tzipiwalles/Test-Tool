@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef } from 'react';
 import { Cycle, Note, User, Test, NoteParentType, CycleItem, UUID, UserRole } from '../types';
 import { useData } from './DataContext';
@@ -276,23 +277,43 @@ const GlobalNotesView: React.FC = () => {
                 </header>
                 <div className="flex-1 p-4 overflow-y-auto space-y-6">
                      <div>
-                        <label htmlFor="search" className="text-sm font-semibold text-gray-600 dark:text-gray-300">Search Notes</label>
+                        <div className="flex justify-between items-center">
+                            <label htmlFor="search" className="text-sm font-semibold text-gray-600 dark:text-gray-300">Search Notes</label>
+                            {searchTerm && (
+                                <button onClick={() => setSearchTerm('')} className="text-xs text-blue-500 hover:underline">Clear</button>
+                            )}
+                        </div>
                         <input id="search" type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Type to search..." className="mt-1 w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1 text-sm"/>
                     </div>
                      <div>
-                        <label htmlFor="cycle-filter" className="text-sm font-semibold text-gray-600 dark:text-gray-300">Filter by Cycle / Version</label>
+                        <div className="flex justify-between items-center">
+                            <label htmlFor="cycle-filter" className="text-sm font-semibold text-gray-600 dark:text-gray-300">Filter by Cycle / Version</label>
+                            {selectedCycles.length > 0 && (
+                                <button onClick={() => setSelectedCycles([])} className="text-xs text-blue-500 hover:underline">Clear</button>
+                            )}
+                        </div>
                         <select id="cycle-filter" multiple value={selectedCycles} onChange={e => setSelectedCycles(Array.from(e.target.selectedOptions, option => option.value))} className="mt-1 w-full h-32 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm">
                             {cycles.map(cycle => <option key={cycle.id} value={cycle.id}>{cycle.name}{cycle.version && ` (${cycle.version})`}</option>)}
                         </select>
                     </div>
                     <div>
-                        <label htmlFor="author-filter" className="text-sm font-semibold text-gray-600 dark:text-gray-300">Filter by Author</label>
+                        <div className="flex justify-between items-center">
+                            <label htmlFor="author-filter" className="text-sm font-semibold text-gray-600 dark:text-gray-300">Filter by Author</label>
+                             {selectedAuthors.length > 0 && (
+                                <button onClick={() => setSelectedAuthors([])} className="text-xs text-blue-500 hover:underline">Clear</button>
+                            )}
+                        </div>
                         <select id="author-filter" multiple value={selectedAuthors} onChange={e => setSelectedAuthors(Array.from(e.target.selectedOptions, option => option.value))} className="mt-1 w-full h-24 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm">
                             {users.map(user => <option key={user.id} value={user.id}>{user.displayName}</option>)}
                         </select>
                     </div>
                      <div>
-                        <label htmlFor="type-filter" className="text-sm font-semibold text-gray-600 dark:text-gray-300">Filter by Note Type</label>
+                        <div className="flex justify-between items-center">
+                           <label htmlFor="type-filter" className="text-sm font-semibold text-gray-600 dark:text-gray-300">Filter by Note Type</label>
+                            {selectedNoteTypes.length > 0 && (
+                                <button onClick={() => setSelectedNoteTypes([])} className="text-xs text-blue-500 hover:underline">Clear</button>
+                            )}
+                        </div>
                         <select id="type-filter" multiple value={selectedNoteTypes} onChange={e => setSelectedNoteTypes(Array.from(e.target.selectedOptions, option => option.value) as NoteParentType[])} className="mt-1 w-full h-24 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm">
                             {noteParentTypeValues.map(type => <option key={type} value={type} className="capitalize">{type === 'objectType' ? 'Object Type' : type}</option>)}
                         </select>
