@@ -4,7 +4,7 @@ import { useData } from './DataContext';
 import { UserIcon } from './icons/UserIcon';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
 import { User, UserRole } from '../types';
-import { LogoIcon } from './icons/LogoIcon';
+import { LogoIcon } from './icons/LogoIcon.svg';
 
 const getRoleName = (role: UserRole) => {
     switch (role) {
@@ -17,7 +17,7 @@ const getRoleName = (role: UserRole) => {
 };
 
 const UserAvatar: React.FC<{ user: User | null }> = ({ user }) => {
-    const initials = user ? user.displayName.split(' ').map(n => n[0]).join('') : '';
+    const initials = user ? user.displayName.split(' ').map(n => n[0]).join('') : '?';
     const colors = ['#f87171', '#fb923c', '#fbbf24', '#a3e635', '#4ade80', '#34d399', '#2dd4bf', '#22d3ee', '#38bdf8', '#60a5fa', '#818cf8', '#a78bfa', '#c084fc', '#e879f9', '#f472b6'];
     const colorIndex = user ? user.displayName.charCodeAt(0) % colors.length : 0;
     const bgColor = colors[colorIndex];

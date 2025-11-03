@@ -1,6 +1,5 @@
-
 import React, { useState, useMemo, useRef } from 'react';
-import { Cycle, CycleItem, CycleItemResult, CycleStatus, Scope, ScopeName, Test } from '../types';
+import { Cycle, CycleItem, CycleItemResult, CycleStatus, Scope, ScopeName, Test, CycleMapInfo } from '../types';
 import CycleBuilder from './CycleBuilder';
 import { PlusIcon } from './icons/PlusIcon';
 import { useData } from './DataContext';
@@ -272,7 +271,7 @@ const CyclesView: React.FC = () => {
   
   const handleExportCycleCSV = (cycle: Cycle) => {
     const headers = [
-      'cycle_name', 'cycle_description', 'cycle_labels', 'cycle_version', 'cycle_refVersion', 'cycle_type',
+      'cycle_name', 'cycle_description', 'cycle_labels', 'cycle_version', 'cycle_refVersion', 'cycle_type', 'cycle_mapsInfo_json',
       'scope_name',
       'test_id', 'snapshot_name', 'snapshot_steps', 'snapshot_labels', 'snapshot_affectedObjectType', 'snapshot_testMethod',
       'assignee_email', 'result', 'item_map', 'item_configurations'
@@ -289,6 +288,10 @@ const CyclesView: React.FC = () => {
     const cycleScopes = scopes.filter(s => s.cycleId === cycle.id);
     const cycleItemsForExport = cycleItems.filter(item => item.cycleId === cycle.id);
 
+    const mapsInfoJson = cycle.mapsInfo
+        ? JSON.stringify(cycle.mapsInfo.map(({ id, ...rest }) => rest))
+        : '[]';
+
     const rows = cycleItemsForExport.map(item => {
         const scope = cycleScopes.find(s => s.id === item.scopeId);
         const assignee = users.find(u => u.id === item.assigneeId);
@@ -296,7 +299,7 @@ const CyclesView: React.FC = () => {
         const stepsString = item.testSnapshot.steps.map(s => `${s.action || ''}||${s.expected || ''}`).join('@@');
 
         return [
-            cycle.name, cycle.description, (cycle.labels || []).join(','), cycle.version, cycle.refVersion, cycle.cycleType,
+            cycle.name, cycle.description, (cycle.labels || []).join(','), cycle.version, cycle.refVersion, cycle.cycleType, mapsInfoJson,
             scope?.name || ScopeName.NONE,
             item.testId, item.testSnapshot.name, stepsString, (item.testSnapshot.labels || []).join(','), item.testSnapshot.affectedObjectType, item.testSnapshot.testMethod,
             assignee?.email || '', item.result, item.map, (item.configurations || []).join(',')
@@ -401,7 +404,7 @@ const CyclesView: React.FC = () => {
     }
     const headers = headerRow.map(h => h.trim());
 
-    const requiredHeaders = ['cycle_name', 'scope_name', 'test_id'];
+    const requiredHeaders = ['cycle_name', 'scope_name', 'test_id', 'snapshot_name'];
     if (!requiredHeaders.every(h => headers.includes(h))) {
         setImportStatus({ message: `CSV is missing required headers. Required: ${requiredHeaders.join(', ')}`, error: true });
         return;
@@ -413,6 +416,22 @@ const CyclesView: React.FC = () => {
     }
     
     const firstRow = headers.reduce((obj, key, i) => ({...obj, [key]: (nonEmptyRows[0][i] || '').trim() }), {} as Record<string, string>);
+    let errors: string[] = [];
+
+    let mapsInfo: CycleMapInfo[] = [];
+    if (headers.includes('cycle_mapsInfo_json') && firstRow.cycle_mapsInfo_json) {
+        try {
+            const parsedMapsInfo = JSON.parse(firstRow.cycle_mapsInfo_json);
+            if (Array.isArray(parsedMapsInfo)) {
+                mapsInfo = parsedMapsInfo.map((info: Omit<CycleMapInfo, 'id'>, index: number) => ({
+                    ...info,
+                    id: `mi-${Date.now()}-${index}-${Math.random().toString(36).substring(2, 9)}`,
+                }));
+            }
+        } catch (e) {
+            errors.push(`Warning: Could not parse 'cycle_mapsInfo_json'. Map information will be ignored.`);
+        }
+    }
 
     const newCycle: Cycle = {
       id: `c-${Date.now()}`,
@@ -424,12 +443,12 @@ const CyclesView: React.FC = () => {
       version: firstRow.cycle_version,
       refVersion: firstRow.cycle_refVersion,
       cycleType: firstRow.cycle_type as any,
+      mapsInfo,
     };
     
     const newScopes: Scope[] = [];
     const newCycleItems: CycleItem[] = [];
     const scopeNameToIdMap = new Map<string, string>();
-    let errors: string[] = [];
     let itemsSkipped = 0;
 
     nonEmptyRows.forEach((values, index) => {
@@ -441,11 +460,11 @@ const CyclesView: React.FC = () => {
         return;
       }
       
-      const test = tests.find(t => t.id === row.test_id);
-      if (!test) {
-        errors.push(`Row ${index + 2}: Test with ID "${row.test_id}" not found in library. Skipping item.`);
-        itemsSkipped++;
-        return;
+      const snapshotName = row.snapshot_name;
+      if (!snapshotName) {
+          errors.push(`Row ${index + 2}: 'snapshot_name' is missing or empty in the CSV. Skipping item.`);
+          itemsSkipped++;
+          return;
       }
 
       let scopeId: string;
@@ -465,17 +484,22 @@ const CyclesView: React.FC = () => {
       
       const assignee = users.find(u => u.email === row.assignee_email);
 
+      const snapshotSteps = (row.snapshot_steps || '').split('@@').map((s, i) => {
+          const [action, expected] = s.split('||');
+          return { step_no: i + 1, action: action || '', expected: expected || '' };
+      }).filter(s => s.action || s.expected);
+
       const newItem: CycleItem = {
           id: `ci-${Date.now()}-${row.test_id}-${index}`,
           cycleId: newCycle.id,
           scopeId: scopeId,
           testId: row.test_id,
           testSnapshot: {
-            name: test.name,
-            steps: test.steps,
-            labels: test.labels,
-            affectedObjectType: test.affectedObjectType,
-            testMethod: test.testMethod,
+            name: snapshotName,
+            steps: snapshotSteps,
+            labels: (row.snapshot_labels || '').split(',').map(l => l.trim()).filter(Boolean),
+            affectedObjectType: row.snapshot_affectedObjectType,
+            testMethod: row.snapshot_testMethod,
           },
           assigneeId: assignee?.id || null,
           result: (row.result as CycleItemResult) || CycleItemResult.NOT_RUN,

@@ -26,6 +26,53 @@ import { CopyIcon } from './icons/CopyIcon';
 import { EditIcon } from './icons/EditIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 
+const ConfirmationModal: React.FC<{
+  title: string;
+  message: React.ReactNode;
+  onConfirm: () => void;
+  onCancel: () => void;
+  confirmText?: string;
+  confirmButtonClass?: string;
+}> = ({ title, message, onConfirm, onCancel, confirmText = 'Confirm', confirmButtonClass = 'bg-blue-accent hover:bg-blue-600' }) => {
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 animate-fade-in-down" style={{animationDuration: '0.2s'}} onMouseDown={onCancel}>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md text-gray-900 dark:text-white" onMouseDown={e => e.stopPropagation()}>
+        <div className="flex items-start">
+            <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/50 sm:mx-0 sm:h-10 sm:w-10">
+                <AlertTriangleIcon className="h-6 w-6 text-red-600 dark:text-red-400" aria-hidden="true" />
+            </div>
+            <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                <h3 className="text-lg leading-6 font-bold" id="modal-title">
+                    {title}
+                </h3>
+                <div className="mt-2">
+                    <div className="text-sm text-gray-600 dark:text-gray-300">
+                        {message}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+          <button
+            type="button"
+            onClick={onConfirm}
+            className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white sm:ml-3 sm:w-auto sm:text-sm ${confirmButtonClass}`}
+          >
+            {confirmText}
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-500 shadow-sm px-4 py-2 bg-white dark:bg-gray-700 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-accent sm:mt-0 sm:w-auto sm:text-sm"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const MultiSelectPills: React.FC<{
   options: string[];
   selected: string[];
@@ -598,6 +645,7 @@ const CycleBuilder: React.FC<{
     const [viewMode, setViewMode] = useState<'builder' | 'review'>('builder');
     const [isPinnedNoteVisible, setIsPinnedNoteVisible] = useState(true);
     const [isEditingName, setIsEditingName] = useState(false);
+    const [scopeToDelete, setScopeToDelete] = useState<Scope | null>(null);
 
     const isArchived = editingCycle.status === CycleStatus.ARCHIVED;
 
@@ -659,7 +707,8 @@ const CycleBuilder: React.FC<{
     };
 
     const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const { name, value } = e.currentTarget;
+        // Fix: Changed e.currentTarget to e.target to resolve type error.
+        const { name, value } = e.target;
         setFilters(prev => ({ ...prev, [name]: value }));
     };
     
@@ -721,15 +770,17 @@ const CycleBuilder: React.FC<{
         setScopes(prev => prev.map(s => s.id === scopeId ? {...s, ...updates} : s));
     };
 
-    const handleDeleteScope = (scopeId: string) => {
-        if (window.confirm("Are you sure you want to delete this scope and all its tests? This action cannot be undone.")) {
-            setScopes(prev => prev.filter(s => s.id !== scopeId));
-            setCycleItems(prev => prev.filter(item => item.scopeId !== scopeId));
-            if (selectedScopeId === scopeId) {
-                const remainingScopes = scopes.filter(s => s.cycleId === cycle.id && s.id !== scopeId);
-                setSelectedScopeId(remainingScopes[0]?.id || null);
-            }
+    const handleConfirmDeleteScope = () => {
+        if (!scopeToDelete) return;
+
+        const scopeId = scopeToDelete.id;
+        setScopes(prev => prev.filter(s => s.id !== scopeId));
+        setCycleItems(prev => prev.filter(item => item.scopeId !== scopeId));
+        if (selectedScopeId === scopeId) {
+            const remainingScopes = scopes.filter(s => s.cycleId === cycle.id && s.id !== scopeId);
+            setSelectedScopeId(remainingScopes[0]?.id || null);
         }
+        setScopeToDelete(null);
     };
 
     const handleAddTests = (testsToAdd: Test[], mapsToAdd: string[], configsToAdd: string[]) => {
@@ -960,6 +1011,16 @@ const CycleBuilder: React.FC<{
 
     return (
         <div className="flex h-full overflow-hidden">
+             {scopeToDelete && (
+                <ConfirmationModal
+                    title="Delete Scope"
+                    message={<p>Are you sure you want to delete the scope "<strong>{scopeToDelete.name}</strong>" and all its tests? This action cannot be undone.</p>}
+                    onConfirm={handleConfirmDeleteScope}
+                    onCancel={() => setScopeToDelete(null)}
+                    confirmText="Delete"
+                    confirmButtonClass="bg-red-600 hover:bg-red-700"
+                />
+            )}
              {permissions.canEditCycles && isAddTestModalOpen && !isArchived && (
                 <AddTestsModal 
                     onClose={() => setIsAddTestModalOpen(false)} 
@@ -1236,7 +1297,7 @@ const CycleBuilder: React.FC<{
                                         </select>
                                         <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">({itemCount})</span>
                                         {permissions.canEditCycles && cycleScopes.length > 1 && !isArchived && (
-                                            <button onClick={(e) => { e.stopPropagation(); handleDeleteScope(scope.id); }} className="ml-auto text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Delete Scope">
+                                            <button onClick={(e) => { e.stopPropagation(); setScopeToDelete(scope); }} className="ml-auto text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Delete Scope">
                                                 <TrashIcon className="w-3 h-3"/>
                                             </button>
                                         )}

@@ -9,8 +9,10 @@ import { SunIcon } from './components/icons/SunIcon';
 import { MoonIcon } from './components/icons/MoonIcon';
 import Header from './components/Header';
 import TestPlanReviewView from './components/TestPlanReviewView';
+import { ReviewIcon } from './components/icons/ReviewIcon';
+import GlobalNotesView from './components/GlobalNotesView';
 
-type View = 'library' | 'cycles';
+type View = 'library' | 'cycles' | 'notes';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('library');
@@ -20,6 +22,7 @@ const App: React.FC = () => {
   const navItems = [
     { id: 'library', label: 'Test Library', icon: <ArchiveIcon /> },
     { id: 'cycles', label: 'Test Cycles', icon: <PlayIcon /> },
+    { id: 'notes', label: 'Notes Review', icon: <ReviewIcon /> },
   ];
 
   if (reviewingTestIds) {
@@ -64,6 +67,7 @@ const App: React.FC = () => {
         <main className="flex-1 flex flex-col overflow-hidden">
           {currentView === 'library' && <TestLibraryView onStartReview={setReviewingTestIds} />}
           {currentView === 'cycles' && <CyclesView />}
+          {currentView === 'notes' && <GlobalNotesView />}
         </main>
       </div>
     </div>
