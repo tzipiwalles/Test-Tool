@@ -210,7 +210,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       method: 'POST',
       body: JSON.stringify(testData)
     });
-    setTests(prev => [newTest, ...prev]);
+    if (newTest) {
+      setTests(prev => [newTest, ...prev]);
+    } else {
+      throw new Error('Server did not return the created test');
+    }
   };
 
   const updateTest = async (testId: UUID, testData: Partial<Test>) => {
@@ -218,7 +222,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       method: 'PATCH',
       body: JSON.stringify(testData)
     });
-    setTests(prev => prev.map(t => t.id === testId ? updated : t));
+    if (updated) {
+      setTests(prev => prev.map(t => t.id === testId ? updated : t));
+    } else {
+      throw new Error('Server did not return the updated test');
+    }
   };
 
   const bulkUpdateTests = async (payload: BulkTestUpdatePayload) => {
@@ -237,7 +245,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       method: 'POST',
       body: JSON.stringify(cycleData)
     });
-    setCycles(prev => [newCycle, ...prev]);
+    if (newCycle) {
+      setCycles(prev => [newCycle, ...prev]);
+    } else {
+      throw new Error('Server did not return the created cycle');
+    }
   };
 
   const bulkUpdateCycleItems = async (payload: BulkCycleItemUpdatePayload | LegacyBulkCycleItemUpdatePayload) => {
