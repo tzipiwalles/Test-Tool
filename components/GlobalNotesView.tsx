@@ -54,7 +54,8 @@ interface ProcessedNote extends Note {
         name: string;
         test?: Test;
     };
-    // Fix: Changed author to be explicitly `User | undefined` to resolve a tricky type predicate error.
+    // Fix: Changed from `author?: User` to `author: User | undefined` to more accurately
+    // reflect the object shape created in `processedNotes` and fix the type predicate error.
     author: User | undefined;
     cycle: Cycle;
 }
@@ -73,7 +74,6 @@ const NoteCard: React.FC<{note: ProcessedNote}> = ({ note }) => {
                     </div>
                 </div>
                 <div className="flex items-center flex-shrink-0 ml-4">
-                     {/* Fix: Replaced invalid `title` prop with a child `<title>` element for SVG accessibility. */}
                      {note.isPinned && <PinIcon className="w-4 h-4 text-gray-400 mr-2"><title>Pinned Note</title></PinIcon>}
                     <div className="text-right">
                         <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate" title={note.cycle.name}>{note.cycle.name}</p>
@@ -291,7 +291,6 @@ const GlobalNotesView: React.FC = () => {
                                 <button onClick={() => setSelectedCycles([])} className="text-xs text-blue-500 hover:underline">Clear</button>
                             )}
                         </div>
-                        {/* Fix: Added type for event object to resolve 'e.target.selectedOptions' error. */}
                         <select id="cycle-filter" multiple value={selectedCycles} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedCycles(Array.from(e.target.selectedOptions, option => option.value))} className="mt-1 w-full h-32 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm">
                             {cycles.map(cycle => <option key={cycle.id} value={cycle.id}>{cycle.name}{cycle.version && ` (${cycle.version})`}</option>)}
                         </select>
@@ -303,7 +302,6 @@ const GlobalNotesView: React.FC = () => {
                                 <button onClick={() => setSelectedAuthors([])} className="text-xs text-blue-500 hover:underline">Clear</button>
                             )}
                         </div>
-                        {/* Fix: Added type for event object to resolve 'e.target.selectedOptions' error. */}
                         <select id="author-filter" multiple value={selectedAuthors} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedAuthors(Array.from(e.target.selectedOptions, option => option.value))} className="mt-1 w-full h-24 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm">
                             {users.map(user => <option key={user.id} value={user.id}>{user.displayName}</option>)}
                         </select>
@@ -315,7 +313,6 @@ const GlobalNotesView: React.FC = () => {
                                 <button onClick={() => setSelectedNoteTypes([])} className="text-xs text-blue-500 hover:underline">Clear</button>
                             )}
                         </div>
-                        {/* Fix: Added type for event object to resolve 'e.target.selectedOptions' error. */}
                         <select id="type-filter" multiple value={selectedNoteTypes} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedNoteTypes(Array.from(e.target.selectedOptions, option => option.value) as NoteParentType[])} className="mt-1 w-full h-24 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm">
                             {noteParentTypeValues.map(type => <option key={type} value={type} className="capitalize">{type === 'objectType' ? 'Object Type' : type}</option>)}
                         </select>

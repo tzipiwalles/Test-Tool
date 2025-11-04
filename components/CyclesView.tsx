@@ -175,7 +175,6 @@ const CyclesView: React.FC = () => {
         description: cycleData.description,
         labels: cycleData.labels.split(',').map(l => l.trim()).filter(Boolean),
         version: "1.0", // Default value
-        // Fix: Use the CycleType enum for type safety instead of a string literal.
         cycleType: CycleType.REGRESSION // Default value
     };
     createCycle(newCycleData);

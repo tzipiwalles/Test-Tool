@@ -947,8 +947,13 @@ const CycleBuilder: React.FC<{
         setCycleItems(prev => [...prev, ...newItems]);
     };
 
-    const handleUpdateItem = (itemId: string, updates: Partial<CycleItem>) => {
-        bulkUpdateCycleItems({ itemIds: [itemId], updates });
+    const handleUpdateItem = async (itemId: string, updates: Partial<CycleItem>) => {
+        try {
+          await bulkUpdateCycleItems({ itemIds: [itemId], updates });
+        } catch (error) {
+          console.error('Failed to update cycle item:', error);
+          alert(`Failed to update cycle item: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
     }
 
     const handleRemoveItem = (itemId: string) => {
@@ -1108,23 +1113,33 @@ const CycleBuilder: React.FC<{
         }
     };
 
-    const handleBulkEditSave = (changes: BulkCycleItemChanges) => {
-        bulkUpdateCycleItems({
-            itemIds: Array.from(selectedItemIds),
-            updates: changes
-        });
-        setIsBulkEditModalOpen(false);
-        setSelectedItemIds(new Set());
+    const handleBulkEditSave = async (changes: BulkCycleItemChanges) => {
+        try {
+          await bulkUpdateCycleItems({
+              itemIds: Array.from(selectedItemIds),
+              updates: changes
+          });
+          setIsBulkEditModalOpen(false);
+          setSelectedItemIds(new Set());
+        } catch (error) {
+          console.error('Failed to bulk update cycle items:', error);
+          alert(`Failed to bulk update cycle items: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
     };
 
-    const handleBulkStatusChange = (result: CycleItemResult) => {
+    const handleBulkStatusChange = async (result: CycleItemResult) => {
         if (selectedItemIds.size === 0) return;
-        bulkUpdateCycleItems({
-            itemIds: Array.from(selectedItemIds),
-            updates: { result }
-        });
-        setSelectedItemIds(new Set());
-        setLastSelectedItemId(null);
+        try {
+          await bulkUpdateCycleItems({
+              itemIds: Array.from(selectedItemIds),
+              updates: { result }
+          });
+          setSelectedItemIds(new Set());
+          setLastSelectedItemId(null);
+        } catch (error) {
+          console.error('Failed to update cycle item status:', error);
+          alert(`Failed to update cycle item status: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
     };
 
     const handleExportMapsCSV = () => {

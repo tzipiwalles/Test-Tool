@@ -180,13 +180,11 @@ const NoteReviewView: React.FC<{ cycle: Cycle, onBack: () => void }> = ({ cycle,
     };
 
     const handleMapFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-// Fix: Replaced `Array.from` with spread syntax and `.map()` to avoid type inference issues.
         const options = [...e.currentTarget.selectedOptions].map(option => option.value);
         setSelectedMaps(options);
     };
 
     const handleAffectedObjectFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-// Fix: Replaced `Array.from` with spread syntax and `.map()` to avoid type inference issues.
         const options = [...e.currentTarget.selectedOptions].map(option => option.value);
         setSelectedAffectedObjects(options);
     };
