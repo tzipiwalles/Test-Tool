@@ -674,9 +674,14 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
       const existingIds = folders
         .map(f => {
           const parts = f.id.split('-');
-          return parts.length === 2 ? parseInt(parts[1], 10) : NaN;
+          // Validate format is 'f-{number}'
+          if (parts.length === 2 && parts[0] === 'f') {
+            const num = parseInt(parts[1], 10);
+            return isNaN(num) ? 0 : num;
+          }
+          return 0;
         })
-        .filter(id => !isNaN(id));
+        .filter(id => id > 0);
       folderIdCounter = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1;
     }
     
