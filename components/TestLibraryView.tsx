@@ -640,8 +640,7 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
 
     const newTests: TestCreate[] = [];
     const updatedTests: { id: string, data: TestCreate }[] = [];
-    const tempNewFolders: Omit<Folder, 'children' | 'tests'>[] = [];
-    const allCurrentFolders = [...folders];
+    const skippedTests: { row: number, name: string, reason: string }[] = [];
     
     const pathIdCache = new Map<string, string>();
     folders.forEach(f => {
@@ -665,40 +664,14 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
       if (pathIdCache.has(row.folderPath)) {
           folderId = pathIdCache.get(row.folderPath)!;
       } else {
-          // NOTE: Folder creation via CSV is not supported by the backend.
-          // This will create folders in local state only.
-          const pathParts = row.folderPath.split('/').filter(p => p);
-          let currentParentId: UUID | null = null;
-          let currentPath = '';
-
-          for (const part of pathParts) {
-              currentPath += `/${part}`;
-              if (pathIdCache.has(currentPath)) {
-                  currentParentId = pathIdCache.get(currentPath)!;
-              } else {
-                  const newFolder: Omit<Folder, 'children' | 'tests'> = {
-                      id: `f-${Date.now()}-${Math.random().toString(36).substring(2,9)}`,
-                      name: part,
-                      parentId: currentParentId,
-                      path: currentPath,
-                  };
-                  tempNewFolders.push(newFolder);
-                  allCurrentFolders.push(newFolder);
-                  pathIdCache.set(currentPath, newFolder.id);
-                  currentParentId = newFolder.id;
-              }
-          }
-          if (currentParentId) {
-            folderId = currentParentId;
-          } else {
-            const rootFolder = allCurrentFolders.find(f => !f.parentId);
-            if(rootFolder) {
-              folderId = rootFolder.id;
-            } else {
-              errors.push(`Row ${index + 2}: Could not determine folder for path "${row.folderPath}" and no root folder found.`);
-              return;
-            }
-          }
+          // Folder path does not exist in the backend
+          // Skip this test and inform the user
+          skippedTests.push({
+            row: index + 2,
+            name: row.name,
+            reason: `Folder path "${row.folderPath}" does not exist. Please create the folder first.`
+          });
+          return;
       }
       
       const steps: TestStep[] = (row.steps || '').split('@@').map((s, i) => {
@@ -733,22 +706,52 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
       return;
     }
 
-    if (tempNewFolders.length > 0) {
-        setFolders(prev => {
-            const existingIds = new Set(prev.map(f => f.id));
-            const uniqueNewFolders = tempNewFolders.filter(f => !existingIds.has(f.id));
-            return [...prev, ...uniqueNewFolders];
-        });
+    if (newTests.length === 0 && updatedTests.length === 0) {
+      const message = skippedTests.length > 0 
+        ? `No tests to import. All ${skippedTests.length} tests were skipped:\n${skippedTests.slice(0, 5).map(s => `Row ${s.row}: ${s.reason}`).join('\n')}${skippedTests.length > 5 ? '\n...' : ''}`
+        : 'No tests to import.';
+      setImportStatus({ message, error: true });
+      return;
     }
 
     setImportStatus({ message: `Importing ${newTests.length} new tests and updating ${updatedTests.length} tests...` });
 
-    const createPromises = newTests.map(t => createTest(t));
-    const updatePromises = updatedTests.map(t => updateTest(t.id, t.data));
-
-    await Promise.all([...createPromises, ...updatePromises]);
+    // Use Promise.allSettled to handle errors gracefully and continue processing
+    const createResults = await Promise.allSettled(newTests.map(t => createTest(t)));
+    const updateResults = await Promise.allSettled(updatedTests.map(t => updateTest(t.id, t.data)));
     
-    setImportStatus({ message: `Import successful!\n- ${newTests.length} tests created.\n- ${updatedTests.length} tests updated.\n- ${tempNewFolders.length} folders created (locally).` });
+    // Count successes and failures
+    const createSuccess = createResults.filter(r => r.status === 'fulfilled').length;
+    const createFailed = createResults.filter(r => r.status === 'rejected').length;
+    const updateSuccess = updateResults.filter(r => r.status === 'fulfilled').length;
+    const updateFailed = updateResults.filter(r => r.status === 'rejected').length;
+
+    // Collect error details
+    const failedDetails: string[] = [];
+    createResults.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        failedDetails.push(`Create test "${newTests[index].name}": ${result.reason?.message || result.reason}`);
+      }
+    });
+    updateResults.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        failedDetails.push(`Update test "${updatedTests[index].data.name}": ${result.reason?.message || result.reason}`);
+      }
+    });
+    
+    // Build result message
+    let resultMessage = 'Import completed:\n';
+    if (createSuccess > 0) resultMessage += `✓ ${createSuccess} tests created\n`;
+    if (updateSuccess > 0) resultMessage += `✓ ${updateSuccess} tests updated\n`;
+    if (skippedTests.length > 0) resultMessage += `⚠ ${skippedTests.length} tests skipped (folder path not found)\n`;
+    if (createFailed > 0 || updateFailed > 0) {
+      resultMessage += `✗ ${createFailed + updateFailed} tests failed\n`;
+      resultMessage += '\nFailure details:\n' + failedDetails.slice(0, 3).join('\n');
+      if (failedDetails.length > 3) resultMessage += `\n... and ${failedDetails.length - 3} more errors`;
+    }
+    
+    const hasErrors = createFailed > 0 || updateFailed > 0 || skippedTests.length > 0;
+    setImportStatus({ message: resultMessage, error: hasErrors });
   
     // After import, select the root folder to ensure imported tests are visible.
     const rootFolder = folders.find(f => !f.parentId);
