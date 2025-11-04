@@ -669,7 +669,16 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
     
     // Keep track of newly created folders locally
     const newFolders: Omit<Folder, 'children' | 'tests'>[] = [];
-    let folderIdCounter = folders.length > 0 ? Math.max(...folders.map(f => parseInt(f.id.split('-')[1]) || 0)) + 1 : 1;
+    let folderIdCounter = 1;
+    if (folders.length > 0) {
+      const existingIds = folders
+        .map(f => {
+          const parts = f.id.split('-');
+          return parts.length === 2 ? parseInt(parts[1], 10) : NaN;
+        })
+        .filter(id => !isNaN(id));
+      folderIdCounter = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1;
+    }
     
     // Helper function to create folder hierarchy from a path
     const ensureFolderPath = (path: string): UUID => {
@@ -774,11 +783,6 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
 
     setImportStatus({ message: `Importing ${newTests.length} new tests and updating ${updatedTests.length} tests...` });
 
-    // Add newly created folders to the state
-    if (newFolders.length > 0) {
-      setFolders(prev => [...prev, ...newFolders]);
-    }
-
     // Use Promise.allSettled to handle errors gracefully and continue processing
     // Process both creates and updates concurrently for better performance
     const allResults = await Promise.allSettled([
@@ -795,6 +799,12 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
     const createFailed = createResults.filter(r => r.status === 'rejected').length;
     const updateSuccess = updateResults.filter(r => r.status === 'fulfilled').length;
     const updateFailed = updateResults.filter(r => r.status === 'rejected').length;
+
+    // Add newly created folders to the state after tests are successfully processed
+    // This ensures folders are only added if there's actual progress
+    if (newFolders.length > 0 && (createSuccess > 0 || updateSuccess > 0)) {
+      setFolders(prev => [...prev, ...newFolders]);
+    }
 
     // Collect error details
     const failedDetails: string[] = [];
