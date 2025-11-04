@@ -167,7 +167,7 @@ const CyclesView: React.FC = () => {
   const [importStatus, setImportStatus] = useState<{message: string, error?: boolean} | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleCreateCycle = (cycleData: { name: string; description: string; labels: string }) => {
+  const handleCreateCycle = async (cycleData: { name: string; description: string; labels: string }) => {
     // NOTE: version, refVersion, cycleType, mapsInfo are not in the modal.
     // The backend seems to require them. Sending empty/default values.
     const newCycleData = {
@@ -178,8 +178,13 @@ const CyclesView: React.FC = () => {
         // Fix: Use the CycleType enum for type safety instead of a string literal.
         cycleType: CycleType.REGRESSION // Default value
     };
-    createCycle(newCycleData);
-    setIsNewCycleModalOpen(false);
+    try {
+      await createCycle(newCycleData);
+      setIsNewCycleModalOpen(false);
+    } catch (error) {
+      console.error('Failed to create cycle:', error);
+      alert(`Failed to create cycle: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   const handleUpdateCycle = (updatedCycle: Cycle) => {

@@ -397,7 +397,7 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
     return testsToShow;
   }, [tests, selectedFolderId, showArchived, searchTerm, folders, getAllChildFolderIds]);
   
-  const handleSaveTest = (testData: Partial<Test>) => {
+  const handleSaveTest = async (testData: Partial<Test>) => {
     const { id, status, updatedAt, updatedBy, ...createData } = testData;
     const payload: TestCreate = {
       name: createData.name!,
@@ -413,17 +413,28 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
       configuration: createData.configuration,
     };
 
-    if (id) { // Edit
-        updateTest(id, payload);
-    } else { // Create
-        createTest(payload);
+    try {
+      if (id) { // Edit
+          await updateTest(id, payload);
+      } else { // Create
+          await createTest(payload);
+      }
+      setEditingTest(null);
+    } catch (error) {
+      console.error('Failed to save test:', error);
+      // Keep the modal open so user can see their data and try again
+      alert(`Failed to save test: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-    setEditingTest(null);
   };
   
-   const handleArchiveTest = (test: Test) => {
-      bulkUpdateTests({ testIds: [test.id], updates: { status: TestStatus.ARCHIVED } });
-      setArchivingTest(null);
+   const handleArchiveTest = async (test: Test) => {
+      try {
+        await bulkUpdateTests({ testIds: [test.id], updates: { status: TestStatus.ARCHIVED } });
+        setArchivingTest(null);
+      } catch (error) {
+        console.error('Failed to archive test:', error);
+        alert(`Failed to archive test: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
   };
 
   const handleDuplicateTest = (testToDuplicate: Test) => {
@@ -455,17 +466,27 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
     }
   };
 
-  const handleBulkEditSave = (changes: BulkChanges) => {
-    bulkUpdateTests({
-        testIds: Array.from(selectedTestIds),
-        updates: changes
-    });
-    setIsBulkEditModalOpen(false);
-    setSelectedTestIds(new Set());
+  const handleBulkEditSave = async (changes: BulkChanges) => {
+    try {
+      await bulkUpdateTests({
+          testIds: Array.from(selectedTestIds),
+          updates: changes
+      });
+      setIsBulkEditModalOpen(false);
+      setSelectedTestIds(new Set());
+    } catch (error) {
+      console.error('Failed to bulk update tests:', error);
+      alert(`Failed to update tests: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
-  const handleDropTest = (testId: string, targetFolderId: string) => {
-      bulkUpdateTests({ testIds: [testId], updates: { folderId: targetFolderId } });
+  const handleDropTest = async (testId: string, targetFolderId: string) => {
+      try {
+        await bulkUpdateTests({ testIds: [testId], updates: { folderId: targetFolderId } });
+      } catch (error) {
+        console.error('Failed to move test:', error);
+        alert(`Failed to move test: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
   };
   
   const handleDropFolder = (folderId: string, targetFolderId: string | null) => {
