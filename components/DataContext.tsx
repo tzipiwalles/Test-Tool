@@ -53,10 +53,10 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-// אם את מריצה את השרת על פורט אחר/דומיין אחר – עדכני כאן
+// If you're running the server on a different port/domain - update here
 const API_BASE_URL = 'http://127.0.0.1:8000/api';
 
-// מיפוי טוקנים “דמי” להתחזות למשתמשים שונים
+// "Mock" token mapping for impersonating different users
 const USER_ID_TO_TOKEN_MAP: Record<string, string> = {
   "u-1": "token-maintainer-tzipi",
   "u-2": "token-lead-michelle",
@@ -83,38 +83,38 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // ---- נקודת מפתח: שליחה כ־Bearer ותמיכה חכמה בכותרות ----
+  // ---- Key point: sending as Bearer with smart header handling ----
   const authedFetch = useCallback(async (url: string, options: RequestInit = {}) => {
     const token = currentUser ? USER_ID_TO_TOKEN_MAP[currentUser.id] : null;
 
-    // נתחיל מכותרות בסיס
+    // Start with base headers
     const headers = new Headers(options.headers);
     headers.set('Accept', 'application/json');
 
-    // נגדיר Content-Type רק אם יש body מסוג מחרוזת/JSON
+    // Set Content-Type only if body is a string/JSON
     const hasStringBody = typeof options.body === 'string';
     if (hasStringBody && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');
     }
 
-    // אופס… אם אין משתמש נוכחי – נכשיל מוקדם
+    // Error: if there's no current user - fail early
     if (!token) {
       throw new Error('No token for current user');
     }
 
-    // חשוב: מעבר ל־Bearer במקום Token
+    // Important: switching to Bearer instead of Token
     headers.set('Authorization', `Bearer ${token}`);
 
     const response = await fetch(url, { ...options, headers });
 
-    // טיפול בשגיאות HTTP עם הודעה שימושית
+    // Handle HTTP errors with helpful message
     if (!response.ok) {
       const text = await response.text().catch(() => '');
       if (response.status === 401) {
-        throw new Error(`401 Unauthorized – בדקי את השרת והטוקן. ${text}`);
+        throw new Error(`401 Unauthorized - check the server and token. ${text}`);
       }
       if (response.status === 403) {
-        throw new Error(`403 Forbidden – ייתכן שלמשתמש אין ההרשאות הנדרשות או שהטוקן לא מזוהה בצד שרת. ${text}`);
+        throw new Error(`403 Forbidden - the user may not have the required permissions or the token is not recognized by the server. ${text}`);
       }
       throw new Error(`API ${response.status} for ${url}: ${text}`);
     }
@@ -203,7 +203,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return { isViewer, canAddNotes, canRunTests, canEditCycles, canCreateCycles, canEditLibrary };
   }, [currentUser]);
 
-  // --- פעולות CRUD מונעות API ---
+  // --- API-driven CRUD operations ---
 
   const createTest = async (testData: TestCreate) => {
     const newTest = await authedFetch(`${API_BASE_URL}/tests`, {
@@ -378,15 +378,15 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   if (isLoading) {
-    return <div className="flex items-center justify-center h-screen w-screen bg-gray-50 dark:bg-gray-950 text-gray-700 dark:text-gray-300">טוען נתונים...</div>;
+    return <div className="flex items-center justify-center h-screen w-screen bg-gray-50 dark:bg-gray-950 text-gray-700 dark:text-gray-300">Loading data...</div>;
   }
 
   if (error) {
     return <div className="flex items-center justify-center h-screen w-screen bg-red-50 text-red-700 p-4">
       <div className="text-center">
-        <h2 className="text-xl font-bold mb-2">שגיאת תקשורת</h2>
+        <h2 className="text-xl font-bold mb-2">Communication Error</h2>
         <p>{error}</p>
-        <p className="mt-2 text-sm">אנא ודאי שהשרת פועל בכתובת: {API_BASE_URL}</p>
+        <p className="mt-2 text-sm">Please ensure the server is running at: {API_BASE_URL}</p>
       </div>
     </div>;
   }
