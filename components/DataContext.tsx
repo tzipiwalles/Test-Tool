@@ -134,34 +134,62 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsLoading(true);
       setError(null);
       try {
+        // Fetch core endpoints that should always exist
         const [
           foldersData,
           testsData,
           cyclesData,
-          cycleItemsData,
-          scopesData,
-          notesData,
-          mapsData,
-          configurationsData
         ] = await Promise.all([
           authedFetch(`${API_BASE_URL}/folders`),
           authedFetch(`${API_BASE_URL}/tests`),
           authedFetch(`${API_BASE_URL}/cycles`),
-          authedFetch(`${API_BASE_URL}/cycle_items`), // שימי לב למקף – תואם בקאנד
-          authedFetch(`${API_BASE_URL}/scopes`),
-          authedFetch(`${API_BASE_URL}/notes`),
-          authedFetch(`${API_BASE_URL}/maps`),
-          authedFetch(`${API_BASE_URL}/configurations`),
         ]);
 
         setFolders(foldersData || []);
         setTests(testsData || []);
         setCycles(cyclesData || []);
-        setCycleItems(cycleItemsData || []);
-        setScopes(scopesData || []);
-        setNotes(notesData || []);
-        setMaps(mapsData || []);
-        setConfigurations(configurationsData || []);
+
+        // Fetch optional endpoints with error handling
+        // Fixed: cycle_items -> cycle-items (hyphen instead of underscore)
+        try {
+          const cycleItemsData = await authedFetch(`${API_BASE_URL}/cycle-items`);
+          setCycleItems(cycleItemsData || []);
+        } catch (err) {
+          console.warn('Failed to fetch cycle items:', err);
+          setCycleItems([]);
+        }
+
+        try {
+          const scopesData = await authedFetch(`${API_BASE_URL}/scopes`);
+          setScopes(scopesData || []);
+        } catch (err) {
+          console.warn('Failed to fetch scopes:', err);
+          setScopes([]);
+        }
+
+        try {
+          const notesData = await authedFetch(`${API_BASE_URL}/notes`);
+          setNotes(notesData || []);
+        } catch (err) {
+          console.warn('Failed to fetch notes:', err);
+          setNotes([]);
+        }
+
+        try {
+          const mapsData = await authedFetch(`${API_BASE_URL}/maps`);
+          setMaps(mapsData || []);
+        } catch (err) {
+          console.warn('Failed to fetch maps:', err);
+          setMaps([]);
+        }
+
+        try {
+          const configurationsData = await authedFetch(`${API_BASE_URL}/configurations`);
+          setConfigurations(configurationsData || []);
+        } catch (err) {
+          console.warn('Failed to fetch configurations:', err);
+          setConfigurations([]);
+        }
       } catch (err: any) {
         if (err instanceof TypeError && err.message === 'Failed to fetch') {
           setError(`Connection to the server failed. Please ensure the backend is running at ${API_BASE_URL} and check for CORS issues.`);
@@ -260,7 +288,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     try {
       // Make the API call. We don't need to process the response if the optimistic update is successful.
-      await authedFetch(`${API_BASE_URL}/cycle_items/bulk_update`, {
+      // Fixed: cycle_items -> cycle-items (hyphen instead of underscore)
+      await authedFetch(`${API_BASE_URL}/cycle-items/bulk_update`, {
         method: 'PATCH',
         body: JSON.stringify(payload),
       });
