@@ -54,6 +54,21 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 // אם את מריצה את השרת על פורט אחר/דומיין אחר – עדכני כאן
 const API_BASE_URL = 'http://127.0.0.1:8000/api';
 
+
+// API Endpoint constants to maintain consistency and prevent URL mismatches
+const API_ENDPOINTS = {
+  FOLDERS: `${API_BASE_URL}/folders`,
+  TESTS: `${API_BASE_URL}/tests`,
+  CYCLES: `${API_BASE_URL}/cycles`,
+  CYCLE_ITEMS: `${API_BASE_URL}/cycle-items`,
+  CYCLE_ITEMS_BULK: `${API_BASE_URL}/cycle-items/bulk_update`,
+  SCOPES: `${API_BASE_URL}/scopes`,
+  NOTES: `${API_BASE_URL}/notes`,
+  MAPS: `${API_BASE_URL}/maps`,
+  CONFIGURATIONS: `${API_BASE_URL}/configurations`,
+  TESTS_BULK: `${API_BASE_URL}/tests/bulk_update`,
+} as const;
+
 // מיפוי טוקנים “דמי” להתחזות למשתמשים שונים
 const USER_ID_TO_TOKEN_MAP: Record<string, string> = {
   "u-1": "token-maintainer-tzipi",
@@ -135,14 +150,15 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setError(null);
       try {
         // Fetch core endpoints that should always exist
+        // If any of these fail, the entire data loading will fail and display an error to the user
         const [
           foldersData,
           testsData,
           cyclesData,
         ] = await Promise.all([
-          authedFetch(`${API_BASE_URL}/folders`),
-          authedFetch(`${API_BASE_URL}/tests`),
-          authedFetch(`${API_BASE_URL}/cycles`),
+          authedFetch(API_ENDPOINTS.FOLDERS),
+          authedFetch(API_ENDPOINTS.TESTS),
+          authedFetch(API_ENDPOINTS.CYCLES),
         ]);
 
         setFolders(foldersData || []);
@@ -152,7 +168,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Fetch optional endpoints with error handling
         // Fixed: cycle_items -> cycle-items (hyphen instead of underscore)
         try {
-          const cycleItemsData = await authedFetch(`${API_BASE_URL}/cycle-items`);
+          const cycleItemsData = await authedFetch(API_ENDPOINTS.CYCLE_ITEMS);
           setCycleItems(cycleItemsData || []);
         } catch (err) {
           console.warn('Failed to fetch cycle items:', err);
@@ -160,7 +176,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         try {
-          const scopesData = await authedFetch(`${API_BASE_URL}/scopes`);
+          const scopesData = await authedFetch(API_ENDPOINTS.SCOPES);
           setScopes(scopesData || []);
         } catch (err) {
           console.warn('Failed to fetch scopes:', err);
@@ -168,7 +184,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         try {
-          const notesData = await authedFetch(`${API_BASE_URL}/notes`);
+          const notesData = await authedFetch(API_ENDPOINTS.NOTES);
           setNotes(notesData || []);
         } catch (err) {
           console.warn('Failed to fetch notes:', err);
@@ -176,7 +192,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         try {
-          const mapsData = await authedFetch(`${API_BASE_URL}/maps`);
+          const mapsData = await authedFetch(API_ENDPOINTS.MAPS);
           setMaps(mapsData || []);
         } catch (err) {
           console.warn('Failed to fetch maps:', err);
@@ -184,7 +200,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         try {
-          const configurationsData = await authedFetch(`${API_BASE_URL}/configurations`);
+          const configurationsData = await authedFetch(API_ENDPOINTS.CONFIGURATIONS);
           setConfigurations(configurationsData || []);
         } catch (err) {
           console.warn('Failed to fetch configurations:', err);
@@ -232,7 +248,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // --- פעולות CRUD מונעות API ---
 
   const createTest = async (testData: TestCreate) => {
-    const newTest = await authedFetch(`${API_BASE_URL}/tests`, {
+    const newTest = await authedFetch(API_ENDPOINTS.TESTS, {
       method: 'POST',
       body: JSON.stringify(testData)
     });
@@ -240,7 +256,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const updateTest = async (testId: UUID, testData: Partial<Test>) => {
-    const updated = await authedFetch(`${API_BASE_URL}/tests/${testId}`, {
+    const updated = await authedFetch(`${API_ENDPOINTS.TESTS}/${testId}`, {
       method: 'PATCH',
       body: JSON.stringify(testData)
     });
@@ -248,7 +264,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const bulkUpdateTests = async (payload: BulkTestUpdatePayload) => {
-    const updated: Test[] = await authedFetch(`${API_BASE_URL}/tests/bulk_update`, {
+    const updated: Test[] = await authedFetch(API_ENDPOINTS.TESTS_BULK, {
       method: 'PATCH',
       body: JSON.stringify(payload)
     });
@@ -259,7 +275,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const createCycle = async (cycleData: CycleCreate) => {
-    const newCycle = await authedFetch(`${API_BASE_URL}/cycles`, {
+    const newCycle = await authedFetch(API_ENDPOINTS.CYCLES, {
       method: 'POST',
       body: JSON.stringify(cycleData)
     });
@@ -289,7 +305,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       // Make the API call. We don't need to process the response if the optimistic update is successful.
       // Fixed: cycle_items -> cycle-items (hyphen instead of underscore)
-      await authedFetch(`${API_BASE_URL}/cycle-items/bulk_update`, {
+      await authedFetch(API_ENDPOINTS.CYCLE_ITEMS_BULK, {
         method: 'PATCH',
         body: JSON.stringify(payload),
       });
