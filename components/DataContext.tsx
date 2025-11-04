@@ -210,10 +210,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       method: 'POST',
       body: JSON.stringify(testData)
     });
-    if (newTest) {
+    if (newTest && newTest.id) {
       setTests(prev => [newTest, ...prev]);
     } else {
-      throw new Error('Server did not return the created test');
+      throw new Error('Server did not return a valid test with an ID');
     }
   };
 
@@ -222,10 +222,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       method: 'PATCH',
       body: JSON.stringify(testData)
     });
-    if (updated) {
+    if (updated && updated.id) {
       setTests(prev => prev.map(t => t.id === testId ? updated : t));
     } else {
-      throw new Error('Server did not return the updated test');
+      throw new Error('Server did not return a valid updated test with an ID');
     }
   };
 
@@ -245,10 +245,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       method: 'POST',
       body: JSON.stringify(cycleData)
     });
-    if (newCycle) {
+    if (newCycle && newCycle.id) {
       setCycles(prev => [newCycle, ...prev]);
     } else {
-      throw new Error('Server did not return the created cycle');
+      throw new Error('Server did not return a valid cycle with an ID');
     }
   };
 

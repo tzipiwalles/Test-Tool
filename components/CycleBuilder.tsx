@@ -952,7 +952,7 @@ const CycleBuilder: React.FC<{
           await bulkUpdateCycleItems({ itemIds: [itemId], updates });
         } catch (error) {
           console.error('Failed to update cycle item:', error);
-          alert(`Failed to update item: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          alert(`Failed to update cycle item: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }
 
@@ -1123,7 +1123,7 @@ const CycleBuilder: React.FC<{
           setSelectedItemIds(new Set());
         } catch (error) {
           console.error('Failed to bulk update cycle items:', error);
-          alert(`Failed to update items: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          alert(`Failed to bulk update cycle items: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     };
 
@@ -1137,8 +1137,8 @@ const CycleBuilder: React.FC<{
           setSelectedItemIds(new Set());
           setLastSelectedItemId(null);
         } catch (error) {
-          console.error('Failed to update status:', error);
-          alert(`Failed to update status: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          console.error('Failed to update cycle item status:', error);
+          alert(`Failed to update cycle item status: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     };
 
