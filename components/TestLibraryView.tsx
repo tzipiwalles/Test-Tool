@@ -266,6 +266,23 @@ const ImportStatusModal: React.FC<{ status: { message: string, error?: boolean }
   </Modal>
 );
 
+// Maximum number of error details to display in import results
+const MAX_DISPLAYED_ERRORS = 3;
+
+// Helper function to safely extract error message from various error types
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message: unknown }).message);
+  }
+  return String(error);
+};
+
 const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> = ({ onStartReview }) => {
   const { folders, setFolders, tests, createTest, updateTest, bulkUpdateTests, permissions } = useData();
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(folders[0]?.id || null);
@@ -289,9 +306,6 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
-
-  // Maximum number of error details to display in import results
-  const MAX_DISPLAYED_ERRORS = 3;
 
   const toggleFolder = useCallback((folderId: string) => {
     setExpandedFolders(prev => {
@@ -740,12 +754,12 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
     const failedDetails: string[] = [];
     createResults.forEach((result, index) => {
       if (result.status === 'rejected') {
-        failedDetails.push(`Create test "${newTests[index].name}": ${result.reason?.message || result.reason}`);
+        failedDetails.push(`Create test "${newTests[index].name}": ${getErrorMessage(result.reason)}`);
       }
     });
     updateResults.forEach((result, index) => {
       if (result.status === 'rejected') {
-        failedDetails.push(`Update test "${updatedTests[index].data.name}": ${result.reason?.message || result.reason}`);
+        failedDetails.push(`Update test "${updatedTests[index].data.name}": ${getErrorMessage(result.reason)}`);
       }
     });
     
