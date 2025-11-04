@@ -14,6 +14,8 @@ import {
     Permissions,
     BulkTestUpdatePayload,
     BulkCycleItemUpdatePayload,
+    LegacyBulkCycleItemUpdatePayload,
+    CycleItemUpdate,
 } from '../types';
 import { initialUsers } from '../data/mockData';
 
@@ -33,7 +35,7 @@ interface DataContextType {
   createCycle: (cycleData: CycleCreate) => Promise<void>;
   cycleItems: CycleItem[];
   setCycleItems: React.Dispatch<React.SetStateAction<CycleItem[]>>;
-  bulkUpdateCycleItems: (payload: BulkCycleItemUpdatePayload) => Promise<void>;
+  bulkUpdateCycleItems: (payload: BulkCycleItemUpdatePayload | LegacyBulkCycleItemUpdatePayload) => Promise<void>;
   scopes: Scope[];
   setScopes: React.Dispatch<React.SetStateAction<Scope[]>>;
   notes: Note[];
@@ -147,7 +149,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           authedFetch(`${API_BASE_URL}/folders`),
           authedFetch(`${API_BASE_URL}/tests`),
           authedFetch(`${API_BASE_URL}/cycles`),
-          authedFetch(`${API_BASE_URL}/cycle_items`), // שימי לב למקף – תואם בקאנד
+          authedFetch(`${API_BASE_URL}/cycle_items`), // Note: OpenAPI spec uses cycle-items but keeping cycle_items for now
           authedFetch(`${API_BASE_URL}/scopes`),
           authedFetch(`${API_BASE_URL}/notes`),
           authedFetch(`${API_BASE_URL}/maps`),
@@ -238,31 +240,87 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setCycles(prev => [newCycle, ...prev]);
   };
 
-  const bulkUpdateCycleItems = async (payload: BulkCycleItemUpdatePayload) => {
+  const bulkUpdateCycleItems = async (payload: BulkCycleItemUpdatePayload | LegacyBulkCycleItemUpdatePayload) => {
     const originalCycleItems = [...cycleItems];
     
-    // Optimistically update the state for immediate UI feedback
-    const updatedIds = new Set(payload.itemIds);
-    const newUpdatedAt = new Date().toISOString().split('T')[0];
+    // Helper to check if payload is legacy format
+    const isLegacyFormat = (p: any): p is LegacyBulkCycleItemUpdatePayload => {
+      return 'itemIds' in p && 'updates' in p && Array.isArray(p.itemIds);
+    };
 
-    setCycleItems(prev =>
-      prev.map(item => {
-        if (updatedIds.has(item.id)) {
-          return {
-            ...item,
-            ...payload.updates,
-            updatedAt: newUpdatedAt,
-          };
-        }
-        return item;
-      })
-    );
+    // Transform legacy format to new format if needed
+    let apiPayload: BulkCycleItemUpdatePayload;
+    let updatedIds: Set<UUID>;
+    let sharedUpdates: Partial<CycleItem>;
+
+    if (isLegacyFormat(payload)) {
+      // Legacy format: { itemIds: [...], updates: {...} }
+      updatedIds = new Set(payload.itemIds);
+      sharedUpdates = payload.updates;
+      
+      // Transform to new format for API: { updates: [{ id: "...", ... }] }
+      apiPayload = {
+        updates: payload.itemIds.map(id => {
+          const update: CycleItemUpdate = { id };
+          if (payload.updates.assigneeId !== undefined) update.assigneeId = payload.updates.assigneeId;
+          if (payload.updates.result !== undefined) update.result = payload.updates.result as string;
+          if (payload.updates.map !== undefined) update.map = payload.updates.map;
+          if (payload.updates.configurations !== undefined) update.configurations = payload.updates.configurations;
+          return update;
+        })
+      };
+    } else {
+      // New format: { updates: [{ id: "...", ... }] }
+      apiPayload = payload;
+      updatedIds = new Set(payload.updates.map(u => u.id));
+      
+      // For optimistic update, we need to extract common updates
+      const updatesMap = new Map(payload.updates.map(u => [u.id, u]));
+      sharedUpdates = {}; // Will apply individual updates below
+      
+      // Optimistically update with individual item changes
+      setCycleItems(prev =>
+        prev.map(item => {
+          const update = updatesMap.get(item.id);
+          if (update) {
+            const changes: Partial<CycleItem> = {};
+            if (update.assigneeId !== undefined) changes.assigneeId = update.assigneeId;
+            if (update.result !== undefined) changes.result = update.result as CycleItemResult;
+            if (update.map !== undefined) changes.map = update.map;
+            if (update.configurations !== undefined) changes.configurations = update.configurations;
+            return {
+              ...item,
+              ...changes,
+              updatedAt: new Date().toISOString().split('T')[0],
+            };
+          }
+          return item;
+        })
+      );
+    }
+    
+    // For legacy format, do the optimistic update
+    if (isLegacyFormat(payload)) {
+      const newUpdatedAt = new Date().toISOString().split('T')[0];
+      setCycleItems(prev =>
+        prev.map(item => {
+          if (updatedIds.has(item.id)) {
+            return {
+              ...item,
+              ...sharedUpdates,
+              updatedAt: newUpdatedAt,
+            };
+          }
+          return item;
+        })
+      );
+    }
 
     try {
-      // Make the API call. We don't need to process the response if the optimistic update is successful.
-      await authedFetch(`${API_BASE_URL}/cycle_items/bulk_update`, {
+      // Make the API call with the correct format
+      await authedFetch(`${API_BASE_URL}/cycle-items/bulk_update`, {
         method: 'PATCH',
-        body: JSON.stringify(payload),
+        body: JSON.stringify(apiPayload),
       });
       // Success: The optimistic update is now considered permanent for this session.
     } catch (error) {

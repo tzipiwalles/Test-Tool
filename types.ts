@@ -198,8 +198,29 @@ export interface CycleDetails extends Cycle {
 
 /**
  * Payload for bulk-updating multiple cycle items at once.
+ * Matches the backend's BulkUpdateRequest schema.
  */
 export interface BulkCycleItemUpdatePayload {
+  updates: CycleItemUpdate[];
+}
+
+/**
+ * Individual cycle item update within a bulk update request.
+ * Matches the backend's CycleItemUpdate schema.
+ */
+export interface CycleItemUpdate {
+  id: UUID;
+  assigneeId?: UUID | null;
+  result?: string | null;
+  map?: string | null;
+  configurations?: string[] | null;
+}
+
+/**
+ * Legacy format for backwards compatibility.
+ * @deprecated Use BulkCycleItemUpdatePayload instead.
+ */
+export interface LegacyBulkCycleItemUpdatePayload {
   itemIds: UUID[];
   updates: Partial<CycleItem>;
 }
