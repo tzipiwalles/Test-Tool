@@ -263,7 +263,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         updates: payload.itemIds.map(id => {
           const update: CycleItemUpdate = { id };
           if (payload.updates.assigneeId !== undefined) update.assigneeId = payload.updates.assigneeId;
-          if (payload.updates.result !== undefined) update.result = payload.updates.result as string;
+          if (payload.updates.result !== undefined) update.result = payload.updates.result;
           if (payload.updates.map !== undefined) update.map = payload.updates.map;
           if (payload.updates.configurations !== undefined) update.configurations = payload.updates.configurations;
           return update;

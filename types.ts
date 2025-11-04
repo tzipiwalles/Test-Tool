@@ -211,7 +211,7 @@ export interface BulkCycleItemUpdatePayload {
 export interface CycleItemUpdate {
   id: UUID;
   assigneeId?: UUID | null;
-  result?: string | null;
+  result?: CycleItemResult | string | null;
   map?: string | null;
   configurations?: string[] | null;
 }
