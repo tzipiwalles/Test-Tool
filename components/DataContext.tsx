@@ -97,7 +97,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       headers.set('Content-Type', 'application/json');
     }
 
-    // Oops... if there's no current user - fail early
+    // Error: if there's no current user - fail early
     if (!token) {
       throw new Error('No token for current user');
     }
@@ -111,10 +111,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!response.ok) {
       const text = await response.text().catch(() => '');
       if (response.status === 401) {
-        throw new Error(`401 Unauthorized – check the server and token. ${text}`);
+        throw new Error(`401 Unauthorized - check the server and token. ${text}`);
       }
       if (response.status === 403) {
-        throw new Error(`403 Forbidden – the user may not have the required permissions or the token is not recognized by the server. ${text}`);
+        throw new Error(`403 Forbidden - the user may not have the required permissions or the token is not recognized by the server. ${text}`);
       }
       throw new Error(`API ${response.status} for ${url}: ${text}`);
     }
