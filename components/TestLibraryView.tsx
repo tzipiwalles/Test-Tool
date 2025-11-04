@@ -679,6 +679,10 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
       
       // Parse the path and create folders as needed
       const parts = path.split('/').filter(p => p.length > 0);
+      if (parts.length === 0) {
+        throw new Error('Invalid folder path: path is empty');
+      }
+      
       let currentPath = '';
       let parentId: UUID | null = null;
       
