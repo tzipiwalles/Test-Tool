@@ -290,6 +290,9 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
 
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
+  // Maximum number of error details to display in import results
+  const MAX_DISPLAYED_ERRORS = 3;
+
   const toggleFolder = useCallback((folderId: string) => {
     setExpandedFolders(prev => {
         const newSet = new Set(prev);
@@ -717,8 +720,15 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
     setImportStatus({ message: `Importing ${newTests.length} new tests and updating ${updatedTests.length} tests...` });
 
     // Use Promise.allSettled to handle errors gracefully and continue processing
-    const createResults = await Promise.allSettled(newTests.map(t => createTest(t)));
-    const updateResults = await Promise.allSettled(updatedTests.map(t => updateTest(t.id, t.data)));
+    // Process both creates and updates concurrently for better performance
+    const allResults = await Promise.allSettled([
+      ...newTests.map(t => createTest(t)),
+      ...updatedTests.map(t => updateTest(t.id, t.data))
+    ]);
+    
+    // Separate results by operation type
+    const createResults = allResults.slice(0, newTests.length);
+    const updateResults = allResults.slice(newTests.length);
     
     // Count successes and failures
     const createSuccess = createResults.filter(r => r.status === 'fulfilled').length;
@@ -746,8 +756,8 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
     if (skippedTests.length > 0) resultMessage += `⚠ ${skippedTests.length} tests skipped (folder path not found)\n`;
     if (createFailed > 0 || updateFailed > 0) {
       resultMessage += `✗ ${createFailed + updateFailed} tests failed\n`;
-      resultMessage += '\nFailure details:\n' + failedDetails.slice(0, 3).join('\n');
-      if (failedDetails.length > 3) resultMessage += `\n... and ${failedDetails.length - 3} more errors`;
+      resultMessage += '\nFailure details:\n' + failedDetails.slice(0, MAX_DISPLAYED_ERRORS).join('\n');
+      if (failedDetails.length > MAX_DISPLAYED_ERRORS) resultMessage += `\n... and ${failedDetails.length - MAX_DISPLAYED_ERRORS} more errors`;
     }
     
     const hasErrors = createFailed > 0 || updateFailed > 0 || skippedTests.length > 0;
