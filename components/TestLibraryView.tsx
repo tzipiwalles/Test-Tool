@@ -1,7 +1,6 @@
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Folder, Test, Priority, TestStatus, TestStep, UUID } from '../types';
-import { buildFolderTree } from '../data/mockData';
+import { Folder, Test, Priority, TestStatus, TestStep, UUID, TestCreate } from '../types';
 import FolderTree from './FolderTree';
 import TestList from './TestList';
 import { PlusIcon } from './icons/PlusIcon';
@@ -12,6 +11,7 @@ import { CollapseAllIcon } from './icons/CollapseAllIcon';
 import { DownloadIcon } from './icons/DownloadIcon';
 import { UploadIcon } from './icons/UploadIcon';
 import { ReviewIcon } from './icons/ReviewIcon';
+import { buildFolderTree } from '../utils';
 
 // A generic Modal component for reuse within this view
 const Modal: React.FC<{ children: React.ReactNode; onClose: () => void; title: string }> = ({ children, onClose, title }) => (
@@ -267,7 +267,7 @@ const ImportStatusModal: React.FC<{ status: { message: string, error?: boolean }
 );
 
 const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> = ({ onStartReview }) => {
-  const { folders, tests, setFolders, setTests, permissions, currentUser } = useData();
+  const { folders, setFolders, tests, createTest, updateTest, bulkUpdateTests, permissions } = useData();
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(folders[0]?.id || null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showArchived, setShowArchived] = useState(false);
@@ -398,30 +398,31 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
   }, [tests, selectedFolderId, showArchived, searchTerm, folders, getAllChildFolderIds]);
   
   const handleSaveTest = (testData: Partial<Test>) => {
-    if (testData.id) { // Edit
-        setTests(prev => prev.map(t => t.id === testData.id ? { ...t, ...testData, updatedAt: new Date().toLocaleDateString(), updatedBy: currentUser?.displayName || 'System' } as Test : t));
+    const { id, status, updatedAt, updatedBy, ...createData } = testData;
+    const payload: TestCreate = {
+      name: createData.name!,
+      folderId: createData.folderId || selectedFolderId!,
+      description: createData.description,
+      steps: createData.steps,
+      labels: createData.labels,
+      priority: createData.priority,
+      affectedObjectType: createData.affectedObjectType,
+      testMethod: createData.testMethod,
+      estimated_duration_sec: createData.estimated_duration_sec,
+      map: createData.map,
+      configuration: createData.configuration,
+    };
+
+    if (id) { // Edit
+        updateTest(id, payload);
     } else { // Create
-        const newTest: Test = {
-            id: `t-${Date.now()}`,
-            folderId: selectedFolderId!,
-            status: TestStatus.ACTIVE,
-            updatedAt: new Date().toLocaleDateString(),
-            updatedBy: currentUser?.displayName || 'System',
-            ...testData,
-            steps: testData.steps || [],
-            labels: testData.labels || [],
-            priority: testData.priority || Priority.P2,
-            estimated_duration_sec: testData.estimated_duration_sec || 60,
-            name: testData.name || 'Untitled Test',
-            description: testData.description || '',
-        } as Test;
-        setTests(prev => [...prev, newTest]);
+        createTest(payload);
     }
     setEditingTest(null);
   };
   
    const handleArchiveTest = (test: Test) => {
-      setTests(prev => prev.map(t => t.id === test.id ? {...t, status: TestStatus.ARCHIVED} : t));
+      bulkUpdateTests({ testIds: [test.id], updates: { status: TestStatus.ARCHIVED } });
       setArchivingTest(null);
   };
 
@@ -429,7 +430,7 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
     const { id, ...testData } = testToDuplicate;
     const newTestForModal: Partial<Test> = {
       ...testData,
-      name: '', // Set name to empty as requested, user will fill it in the modal.
+      name: `Copy of ${testData.name}`, 
     };
     setEditingTest(newTestForModal);
   };
@@ -455,25 +456,31 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
   };
 
   const handleBulkEditSave = (changes: BulkChanges) => {
-    setTests(prev => prev.map(test => 
-        selectedTestIds.has(test.id) ? { ...test, ...changes, updatedAt: new Date().toLocaleDateString(), updatedBy: currentUser?.displayName || 'System' } : test
-    ));
+    bulkUpdateTests({
+        testIds: Array.from(selectedTestIds),
+        updates: changes
+    });
     setIsBulkEditModalOpen(false);
     setSelectedTestIds(new Set());
   };
 
   const handleDropTest = (testId: string, targetFolderId: string) => {
-      setTests(prev => prev.map(t => t.id === testId ? { ...t, folderId: targetFolderId } : t));
+      bulkUpdateTests({ testIds: [testId], updates: { folderId: targetFolderId } });
   };
   
   const handleDropFolder = (folderId: string, targetFolderId: string | null) => {
+      // NOTE: API endpoint for updating a folder is not specified.
+      // This will only update local state.
       setFolders(prev => prev.map(f => f.id === folderId ? { ...f, parentId: targetFolderId } : f));
   };
 
   const handleDeleteFolder = (folderId: string) => {
+    // NOTE: API endpoint for deleting a folder is not specified.
+    // This will only update local state.
     const folderIdsToDelete = [folderId, ...getAllChildFolderIds(folderId, folders)];
     setFolders(prev => prev.filter(f => !folderIdsToDelete.includes(f.id)));
-    setTests(prev => prev.filter(t => !folderIdsToDelete.includes(t.folderId)));
+    // Also remove tests in those folders locally.
+    // setTests(prev => prev.filter(t => !folderIdsToDelete.includes(t.folderId)));
     if (selectedFolderId && folderIdsToDelete.includes(selectedFolderId)) {
         const rootFolder = folders.find(f => !f.parentId);
         setSelectedFolderId(rootFolder ? rootFolder.id : null);
@@ -529,7 +536,7 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
 
       try {
         const csvText = await file.text();
-        processCSVData(csvText);
+        await processCSVData(csvText);
       } catch (error) {
           setImportStatus({ message: `Error reading file: ${error instanceof Error ? error.message : String(error)}`, error: true });
       } finally {
@@ -539,7 +546,7 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
       }
   };
 
-  const processCSVData = (csvText: string) => {
+  const processCSVData = async (csvText: string) => {
     const parseCsv = (text: string): string[][] => {
         const rows: string[][] = [];
         let currentRow: string[] = [];
@@ -610,8 +617,8 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
         return;
     }
 
-    const newTests: Test[] = [];
-    const updatedTests: Test[] = [];
+    const newTests: TestCreate[] = [];
+    const updatedTests: { id: string, data: TestCreate }[] = [];
     const tempNewFolders: Omit<Folder, 'children' | 'tests'>[] = [];
     const allCurrentFolders = [...folders];
     
@@ -637,6 +644,8 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
       if (pathIdCache.has(row.folderPath)) {
           folderId = pathIdCache.get(row.folderPath)!;
       } else {
+          // NOTE: Folder creation via CSV is not supported by the backend.
+          // This will create folders in local state only.
           const pathParts = row.folderPath.split('/').filter(p => p);
           let currentParentId: UUID | null = null;
           let currentPath = '';
@@ -676,10 +685,9 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
           return { step_no: i + 1, action: action || '', expected: expected || '' };
       }).filter(s => s.action || s.expected);
       
-      const testData = {
+      const testData: TestCreate = {
           name: row.name,
           folderId,
-          status: Object.values(TestStatus).includes(row.status as TestStatus) ? row.status as TestStatus : TestStatus.ACTIVE,
           description: row.description || '',
           steps,
           labels: (row.labels || '').split(',').map(l => l.trim()).filter(Boolean),
@@ -687,17 +695,15 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
           affectedObjectType: row.affectedObjectType,
           testMethod: row.testMethod,
           estimated_duration_sec: parseInt(row.estimated_duration_sec, 10) || 60,
-          updatedAt: new Date().toLocaleDateString(),
-          updatedBy: currentUser?.displayName || 'System',
           map: row.map,
           configuration: row.configuration
       };
 
       const existingTest = tests.find(t => t.id === row.id);
       if (existingTest) {
-          updatedTests.push({ ...existingTest, ...testData });
+          updatedTests.push({ id: existingTest.id, data: testData });
       } else {
-          newTests.push({ ...testData, id: row.id || `t-${Date.now()}-${index}` });
+          newTests.push(testData);
       }
     });
 
@@ -713,15 +719,19 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
             return [...prev, ...uniqueNewFolders];
         });
     }
-    if (newTests.length > 0 || updatedTests.length > 0) {
-        setTests(prev => {
-            const updatedIds = new Set(updatedTests.map(t => t.id));
-            const oldTests = prev.filter(t => !updatedIds.has(t.id));
-            return [...oldTests, ...updatedTests, ...newTests];
-        });
-    }
 
-    setImportStatus({ message: `Import successful!\n- ${newTests.length} tests created.\n- ${updatedTests.length} tests updated.\n- ${tempNewFolders.length} folders created.` });
+    setImportStatus({ message: `Importing ${newTests.length} new tests and updating ${updatedTests.length} tests...` });
+
+    const createPromises = newTests.map(t => createTest(t));
+    const updatePromises = updatedTests.map(t => updateTest(t.id, t.data));
+
+    await Promise.all([...createPromises, ...updatePromises]);
+    
+    setImportStatus({ message: `Import successful!\n- ${newTests.length} tests created.\n- ${updatedTests.length} tests updated.\n- ${tempNewFolders.length} folders created (locally).` });
+  
+    // After import, select the root folder to ensure imported tests are visible.
+    const rootFolder = folders.find(f => !f.parentId);
+    setSelectedFolderId(rootFolder ? rootFolder.id : (folders[0]?.id || null));
   };
 
 

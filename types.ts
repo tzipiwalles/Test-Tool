@@ -1,4 +1,5 @@
 
+
 // Fix: Removed self-import of UUID which was causing a conflict.
 export type UUID = string;
 
@@ -156,6 +157,53 @@ export interface CycleItem {
   map: string | null;
   configurations: string[];
 }
+
+// Fix: Added missing type definitions for creating/updating tests and cycles.
+
+/**
+ * Type for creating a new test case.
+ * It omits backend-generated fields like id, status, and timestamps.
+ */
+export type TestCreate = Omit<Test, 'id' | 'status' | 'updatedAt' | 'updatedBy'>;
+
+/**
+ * Payload for bulk-updating multiple test cases at once.
+ */
+export interface BulkTestUpdatePayload {
+  testIds: UUID[];
+  updates: Partial<Test>;
+}
+
+/**
+ * Type for creating a new test cycle.
+ * It omits backend-generated fields.
+ */
+export interface CycleCreate {
+  name: string;
+  description: string;
+  labels: string[];
+  version?: string;
+  refVersion?: string;
+  cycleType?: CycleType;
+  mapsInfo?: CycleMapInfo[];
+}
+
+/**
+ * Represents the full details of a cycle, including its associated scopes and test items.
+ */
+export interface CycleDetails extends Cycle {
+  scopes: Scope[];
+  items: CycleItem[];
+}
+
+/**
+ * Payload for bulk-updating multiple cycle items at once.
+ */
+export interface BulkCycleItemUpdatePayload {
+  itemIds: UUID[];
+  updates: Partial<CycleItem>;
+}
+
 
 export type NoteParentType = 'cycle' | 'map' | 'item' | 'objectType';
 

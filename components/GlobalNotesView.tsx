@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef } from 'react';
 import { Cycle, Note, User, Test, NoteParentType, CycleItem, UUID, UserRole } from '../types';
 import { useData } from './DataContext';
@@ -292,7 +291,8 @@ const GlobalNotesView: React.FC = () => {
                                 <button onClick={() => setSelectedCycles([])} className="text-xs text-blue-500 hover:underline">Clear</button>
                             )}
                         </div>
-                        <select id="cycle-filter" multiple value={selectedCycles} onChange={e => setSelectedCycles(Array.from(e.target.selectedOptions, option => option.value))} className="mt-1 w-full h-32 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm">
+                        {/* Fix: Added type for event object to resolve 'e.target.selectedOptions' error. */}
+                        <select id="cycle-filter" multiple value={selectedCycles} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedCycles(Array.from(e.target.selectedOptions, option => option.value))} className="mt-1 w-full h-32 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm">
                             {cycles.map(cycle => <option key={cycle.id} value={cycle.id}>{cycle.name}{cycle.version && ` (${cycle.version})`}</option>)}
                         </select>
                     </div>
@@ -303,7 +303,8 @@ const GlobalNotesView: React.FC = () => {
                                 <button onClick={() => setSelectedAuthors([])} className="text-xs text-blue-500 hover:underline">Clear</button>
                             )}
                         </div>
-                        <select id="author-filter" multiple value={selectedAuthors} onChange={e => setSelectedAuthors(Array.from(e.target.selectedOptions, option => option.value))} className="mt-1 w-full h-24 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm">
+                        {/* Fix: Added type for event object to resolve 'e.target.selectedOptions' error. */}
+                        <select id="author-filter" multiple value={selectedAuthors} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedAuthors(Array.from(e.target.selectedOptions, option => option.value))} className="mt-1 w-full h-24 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm">
                             {users.map(user => <option key={user.id} value={user.id}>{user.displayName}</option>)}
                         </select>
                     </div>
@@ -314,13 +315,14 @@ const GlobalNotesView: React.FC = () => {
                                 <button onClick={() => setSelectedNoteTypes([])} className="text-xs text-blue-500 hover:underline">Clear</button>
                             )}
                         </div>
-                        <select id="type-filter" multiple value={selectedNoteTypes} onChange={e => setSelectedNoteTypes(Array.from(e.target.selectedOptions, option => option.value) as NoteParentType[])} className="mt-1 w-full h-24 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm">
+                        {/* Fix: Added type for event object to resolve 'e.target.selectedOptions' error. */}
+                        <select id="type-filter" multiple value={selectedNoteTypes} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedNoteTypes(Array.from(e.target.selectedOptions, option => option.value) as NoteParentType[])} className="mt-1 w-full h-24 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm">
                             {noteParentTypeValues.map(type => <option key={type} value={type} className="capitalize">{type === 'objectType' ? 'Object Type' : type}</option>)}
                         </select>
                     </div>
                     <div>
                         <label htmlFor="group-by" className="text-sm font-semibold text-gray-600 dark:text-gray-300">Group Notes By</label>
-                        <select id="group-by" value={groupBy} onChange={e => setGroupBy(e.target.value as any)} className="mt-1 w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm">
+                        <select id="group-by" value={groupBy} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setGroupBy(e.target.value as any)} className="mt-1 w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm">
                             <option value="cycle">Cycle</option>
                             <option value="author">Author</option>
                             <option value="type">Note Type</option>

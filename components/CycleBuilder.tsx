@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Cycle, Test, CycleItem, CycleItemResult, User, CycleStatus, Scope, ScopeName, Priority, Folder, Permissions, UserRole, CycleMapInfo, UUID, Note, NoteParentType } from '../types';
 import { useData } from './DataContext';
-import { buildFolderTree } from '../data/mockData';
+import { buildFolderTree } from '../utils';
 import FolderTree from './FolderTree';
 import { ChevronLeftIcon } from './icons/ChevronLeftIcon';
 import { PlusIcon } from './icons/PlusIcon';
@@ -761,7 +761,7 @@ const CycleBuilder: React.FC<{
   onBack: () => void;
   onUpdateCycle: (cycle: Cycle) => void;
 }> = ({ cycle, onBack, onUpdateCycle }) => {
-    const { cycleItems, setCycleItems, users, scopes, setScopes, tests, maps, setMaps, configurations, setConfigurations, permissions, notes, setNotes, currentUser } = useData();
+    const { cycleItems, setCycleItems, users, scopes, setScopes, tests, maps, setMaps, configurations, setConfigurations, permissions, notes, setNotes, currentUser, bulkUpdateCycleItems } = useData();
     const [editingCycle, setEditingCycle] = useState<Cycle>(cycle);
     const [isAddTestModalOpen, setIsAddTestModalOpen] = useState(false);
     const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
@@ -803,7 +803,7 @@ const CycleBuilder: React.FC<{
         cycleItems
             .filter(item => item.cycleId === cycle.id && item.scopeId === selectedScopeId)
             .map(item => ({...item, test: tests.find(t => t.id === item.testId)}))
-            .filter(item => item.test) // Ensure test exists
+            .filter((item): item is CycleItem & { test: Test } => !!item.test) // Ensure test exists
     , [cycleItems, cycle.id, selectedScopeId, tests]);
 
     const filteredItems = useMemo(() => {
@@ -840,7 +840,6 @@ const CycleBuilder: React.FC<{
     };
 
     const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        // Fix: Changed e.currentTarget to e.target to resolve type error.
         const { name, value } = e.target;
         setFilters(prev => ({ ...prev, [name]: value }));
     };
@@ -886,10 +885,14 @@ const CycleBuilder: React.FC<{
     };
 
     const handleSaveDetails = () => {
+        // NOTE: API endpoint for updating a cycle is not specified.
+        // This will only update local state.
         onUpdateCycle(editingCycle);
     };
 
     const handleAddScope = () => {
+        // NOTE: API endpoint for adding a scope is not specified.
+        // This will only update local state.
         const newScope: Scope = {
             id: `s-${Date.now()}`,
             cycleId: cycle.id,
@@ -900,12 +903,15 @@ const CycleBuilder: React.FC<{
     };
     
     const handleUpdateScope = (scopeId: string, updates: Partial<Scope>) => {
+        // NOTE: API endpoint for updating a scope is not specified.
+        // This will only update local state.
         setScopes(prev => prev.map(s => s.id === scopeId ? {...s, ...updates} : s));
     };
 
     const handleConfirmDeleteScope = () => {
         if (!scopeToDelete) return;
-
+        // NOTE: API endpoint for deleting a scope is not specified.
+        // This will only update local state.
         const scopeId = scopeToDelete.id;
         setScopes(prev => prev.filter(s => s.id !== scopeId));
         setCycleItems(prev => prev.filter(item => item.scopeId !== scopeId));
@@ -919,6 +925,8 @@ const CycleBuilder: React.FC<{
     const handleAddTests = (testsToAdd: Test[], mapsToAdd: string[], configsToAdd: string[]) => {
         if (!selectedScopeId) return;
 
+        // NOTE: API endpoint for adding tests to a cycle is not specified.
+        // This will only update local state.
         const mapCombinations = mapsToAdd.length > 0 ? mapsToAdd : [null];
     
         const newItems: CycleItem[] = testsToAdd.flatMap(test =>
@@ -940,14 +948,18 @@ const CycleBuilder: React.FC<{
     };
 
     const handleUpdateItem = (itemId: string, updates: Partial<CycleItem>) => {
-        setCycleItems(prev => prev.map(item => item.id === itemId ? { ...item, ...updates } : item));
+        bulkUpdateCycleItems({ itemIds: [itemId], updates });
     }
 
     const handleRemoveItem = (itemId: string) => {
+        // NOTE: API endpoint for removing a test from a cycle is not specified.
+        // This will only update local state.
         setCycleItems(prev => prev.filter(item => item.id !== itemId));
     };
 
     const handleDuplicateItem = (itemIdToDuplicate: string) => {
+        // NOTE: API endpoint for duplicating a test in a cycle is not specified.
+        // This will only update local state.
         setCycleItems(prev => {
             const items = [...prev];
             const originalItemIndex = items.findIndex(item => item.id === itemIdToDuplicate);
@@ -971,7 +983,8 @@ const CycleBuilder: React.FC<{
 
     const handleSaveNote = (noteContent: string, isPinned: boolean) => {
         if (!editingNoteTarget || !currentUser) return;
-
+        // NOTE: API endpoint for notes is not specified.
+        // This will only update local state.
         const existingNote = notes.find(n => n.parentId === editingNoteTarget.id);
         const now = new Date().toISOString();
 
@@ -1096,20 +1109,20 @@ const CycleBuilder: React.FC<{
     };
 
     const handleBulkEditSave = (changes: BulkCycleItemChanges) => {
-        setCycleItems(prev => prev.map(item => 
-            selectedItemIds.has(item.id) ? { ...item, ...changes, updatedAt: new Date().toLocaleDateString() } : item
-        ));
+        bulkUpdateCycleItems({
+            itemIds: Array.from(selectedItemIds),
+            updates: changes
+        });
         setIsBulkEditModalOpen(false);
         setSelectedItemIds(new Set());
     };
 
     const handleBulkStatusChange = (result: CycleItemResult) => {
         if (selectedItemIds.size === 0) return;
-        setCycleItems(prev =>
-            prev.map(item =>
-                selectedItemIds.has(item.id) ? { ...item, result: result, updatedAt: new Date().toLocaleDateString() } : item
-            )
-        );
+        bulkUpdateCycleItems({
+            itemIds: Array.from(selectedItemIds),
+            updates: { result }
+        });
         setSelectedItemIds(new Set());
         setLastSelectedItemId(null);
     };
@@ -1606,7 +1619,8 @@ const CycleBuilder: React.FC<{
                     <div className="flex items-center gap-4">
                         <div className="flex items-center">
                             <label htmlFor="group-by" className="text-sm font-medium mr-2">Group by:</label>
-                            <select id="group-by" value={groupBy} onChange={e => setGroupBy(e.target.value)} className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm">
+                            {/* Fix: Added type for event object to resolve 'e.target.value' error. */}
+                            <select id="group-by" value={groupBy} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setGroupBy(e.target.value)} className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm">
                                 <option value="none">None</option>
                                 <option value="result">Result</option>
                                 <option value="assignee">Assignee</option>
@@ -1776,8 +1790,9 @@ const CycleBuilder: React.FC<{
     );
 };
 
+// Fix: Corrected the type of the 'item' prop from 'any' to a more specific type to improve type safety and fix related errors.
 const CycleTestRow: React.FC<{
-    item: any;
+    item: CycleItem & { test: Test };
     allUsers: User[];
     maps: string[];
     configurations: string[];

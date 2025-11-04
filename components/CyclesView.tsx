@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { Cycle, CycleItem, CycleItemResult, CycleStatus, Scope, ScopeName, Test, CycleMapInfo } from '../types';
+import { Cycle, CycleItem, CycleItemResult, CycleStatus, Scope, ScopeName, Test, CycleMapInfo, CycleType } from '../types';
 import CycleBuilder from './CycleBuilder';
 import { PlusIcon } from './icons/PlusIcon';
 import { useData } from './DataContext';
@@ -158,7 +158,7 @@ const CycleProgress: React.FC<{ items: CycleItem[] }> = ({ items }) => {
 
 
 const CyclesView: React.FC = () => {
-  const { cycles, setCycles, cycleItems, setCycleItems, scopes, setScopes, permissions, users, tests } = useData();
+  const { cycles, setCycles, cycleItems, setCycleItems, scopes, setScopes, permissions, users, tests, createCycle } = useData();
   const [selectedCycle, setSelectedCycle] = useState<Cycle | null>(null);
   const [isNewCycleModalOpen, setIsNewCycleModalOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
@@ -168,33 +168,30 @@ const CyclesView: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleCreateCycle = (cycleData: { name: string; description: string; labels: string }) => {
-    const newCycle: Cycle = {
-      id: `c-${Date.now()}`,
-      name: cycleData.name,
-      description: cycleData.description,
-      labels: cycleData.labels.split(',').map(l => l.trim()).filter(Boolean),
-      status: CycleStatus.DRAFT,
-      updatedAt: new Date().toLocaleDateString(),
+    // NOTE: version, refVersion, cycleType, mapsInfo are not in the modal.
+    // The backend seems to require them. Sending empty/default values.
+    const newCycleData = {
+        name: cycleData.name,
+        description: cycleData.description,
+        labels: cycleData.labels.split(',').map(l => l.trim()).filter(Boolean),
+        version: "1.0", // Default value
+        // Fix: Use the CycleType enum for type safety instead of a string literal.
+        cycleType: CycleType.REGRESSION // Default value
     };
-    setCycles(prev => [newCycle, ...prev]);
-
-    const newScope: Scope = {
-      id: `s-${Date.now()}`,
-      cycleId: newCycle.id,
-      name: ScopeName.NONE,
-    };
-    setScopes(prev => [...prev, newScope]);
-    
+    createCycle(newCycleData);
     setIsNewCycleModalOpen(false);
   };
 
   const handleUpdateCycle = (updatedCycle: Cycle) => {
+    // NOTE: API endpoint for updating a cycle is not specified.
+    // This will only update local state.
     setCycles(prev => prev.map(c => c.id === updatedCycle.id ? updatedCycle : c));
     setSelectedCycle(updatedCycle);
   };
 
   const handleDuplicateCycle = (cycleToDuplicate: Cycle) => {
-    // 1. Create the new cycle
+    // NOTE: This logic is complex and relies on a complete view of data.
+    // Without a backend endpoint, this is a client-side only operation.
     const newCycle: Cycle = {
         ...cycleToDuplicate,
         id: `c-${Date.now()}`,
@@ -206,19 +203,11 @@ const CyclesView: React.FC = () => {
         mapsInfo: (cycleToDuplicate.mapsInfo || []).map(info => ({
             id: `mi-${Date.now()}-${Math.random().toString(36).substring(2,9)}`,
             mapName: info.mapName, // Keep map name
-            // Clear all other fields as requested
             mainMapLink: undefined,
             refMapLink: undefined,
-            mainSA: undefined,
-            refSA: undefined,
-            v2vMapsLink: undefined,
-            v2vProbes: undefined,
-            gtProbes: undefined,
-            comment: undefined,
         })),
     };
 
-    // 2. Duplicate scopes
     const oldScopes = scopes.filter(s => s.cycleId === cycleToDuplicate.id);
     const oldToNewScopeIdMap = new Map<string, string>();
     const newScopes: Scope[] = oldScopes.map(scope => {
@@ -231,27 +220,24 @@ const CyclesView: React.FC = () => {
         };
     });
 
-    // 3. Duplicate cycle items
     const oldCycleItems = cycleItems.filter(item => item.cycleId === cycleToDuplicate.id);
     const newCycleItems: CycleItem[] = oldCycleItems.map(item => {
         const newScopeId = oldToNewScopeIdMap.get(item.scopeId);
         if (!newScopeId) {
             console.warn(`Could not find new scope for old scope ${item.scopeId}`);
-            return null; // or handle error appropriately
+            return null;
         }
         return {
             ...item,
             id: `ci-${Date.now()}-${item.testId}-${Math.random().toString(36).substring(2, 9)}`,
             cycleId: newCycle.id,
             scopeId: newScopeId,
-            assigneeId: null, // Clear assignee
-            result: CycleItemResult.NOT_RUN, // Reset result
+            assigneeId: null,
+            result: CycleItemResult.NOT_RUN,
             updatedAt: new Date().toLocaleDateString(),
-            // map and configurations are kept as per requirements.
         };
     }).filter((item): item is CycleItem => item !== null);
 
-    // 4. Update state
     setCycles(prev => [newCycle, ...prev]);
     setScopes(prev => [...prev, ...newScopes]);
     setCycleItems(prev => [...prev, ...newCycleItems]);
@@ -259,6 +245,8 @@ const CyclesView: React.FC = () => {
 
   const handleArchiveCycle = () => {
     if (!archivingCycle) return;
+    // NOTE: API endpoint for archiving/updating a cycle is not specified.
+    // This will only update local state.
     setCycles(prev => prev.map(c => c.id === archivingCycle.id ? { ...c, status: CycleStatus.ARCHIVED } : c));
     setArchivingCycle(null);
   };
@@ -344,6 +332,8 @@ const CyclesView: React.FC = () => {
   };
 
   const processCycleCSVData = (csvText: string) => {
+    // NOTE: This is a complex operation that should ideally be handled
+    // by a dedicated backend endpoint. This implementation is client-side only.
     const parseCsv = (text: string): string[][] => {
         const rows: string[][] = [];
         let currentRow: string[] = [];
@@ -611,7 +601,7 @@ const CyclesView: React.FC = () => {
                 <td className="p-3 font-medium">{cycle.name}</td>
                 <td className="p-3"><CycleStatusBadge status={cycle.status} /></td>
                 <td className="p-3 w-1/3"><CycleProgress items={cycleItems.filter(item => item.cycleId === cycle.id)} /></td>
-                <td className="p-3 text-gray-500 dark:text-gray-400">{cycle.updatedAt}</td>
+                <td className="p-3 text-gray-500 dark:text-gray-400">{new Date(cycle.updatedAt).toLocaleDateString()}</td>
                 <td className="p-3 text-right">
                     <div className="flex items-center justify-end space-x-1">
                         <button
