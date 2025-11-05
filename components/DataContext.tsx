@@ -11,6 +11,8 @@ import {
     CycleItem,
     Scope,
     Note,
+    NoteCreate,
+    NoteUpdate,
     Permissions,
     BulkTestUpdatePayload,
     BulkCycleItemUpdatePayload,
@@ -40,6 +42,8 @@ interface DataContextType {
   setScopes: React.Dispatch<React.SetStateAction<Scope[]>>;
   notes: Note[];
   setNotes: React.Dispatch<React.SetStateAction<Note[]>>;
+  createNote: (noteData: NoteCreate) => Promise<Note>;
+  updateNote: (noteId: UUID, noteData: NoteUpdate) => Promise<Note>;
   maps: string[];
   setMaps: React.Dispatch<React.SetStateAction<string[]>>;
   configurations: string[];
@@ -252,6 +256,32 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const createNote = async (noteData: NoteCreate): Promise<Note> => {
+    const newNote = await authedFetch(`${API_BASE_URL}/notes`, {
+      method: 'POST',
+      body: JSON.stringify(noteData)
+    });
+    if (newNote && newNote.id) {
+      setNotes(prev => [newNote, ...prev]);
+      return newNote;
+    } else {
+      throw new Error('Server did not return a valid note with an ID');
+    }
+  };
+
+  const updateNote = async (noteId: UUID, noteData: NoteUpdate): Promise<Note> => {
+    const updatedNote = await authedFetch(`${API_BASE_URL}/notes/${noteId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(noteData)
+    });
+    if (updatedNote && updatedNote.id) {
+      setNotes(prev => prev.map(n => n.id === noteId ? updatedNote : n));
+      return updatedNote;
+    } else {
+      throw new Error('Server did not return a valid updated note with an ID');
+    }
+  };
+
   const bulkUpdateCycleItems = async (payload: BulkCycleItemUpdatePayload | LegacyBulkCycleItemUpdatePayload) => {
     const originalCycleItems = [...cycleItems];
     
@@ -366,6 +396,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setScopes,
     notes,
     setNotes,
+    createNote,
+    updateNote,
     maps,
     setMaps,
     configurations,

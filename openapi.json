@@ -845,6 +845,103 @@
             }
           }
         }
+      },
+      "post": {
+        "summary": "Create Note",
+        "description": "Create a new note.\nAll users can create notes.",
+        "operationId": "create_note_api_notes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Note"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/notes/{note_id}": {
+      "patch": {
+        "summary": "Update Note",
+        "description": "Update a single note by ID.\nOnly the note author can update their notes.",
+        "operationId": "update_note_api_notes__note_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "note_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Note Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Note"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/maps": {
@@ -1696,32 +1793,124 @@
             "type": "string",
             "title": "Id"
           },
-          "cycleItemId": {
+          "content": {
             "type": "string",
-            "title": "Cycleitemid"
+            "title": "Content",
+            "description": "HTML content from the rich text editor, can include images"
           },
-          "userId": {
+          "authorId": {
             "type": "string",
-            "title": "Userid"
-          },
-          "text": {
-            "type": "string",
-            "title": "Text"
+            "title": "Authorid"
           },
           "createdAt": {
             "type": "string",
             "title": "Createdat"
+          },
+          "updatedAt": {
+            "type": "string",
+            "title": "Updatedat"
+          },
+          "parentId": {
+            "type": "string",
+            "title": "Parentid",
+            "description": "ID of the parent entity (Cycle, CycleMapInfo, CycleItem, or composite key)"
+          },
+          "parentType": {
+            "type": "string",
+            "title": "Parenttype",
+            "enum": ["cycle", "map", "item", "objectType"]
+          },
+          "isPinned": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ispinned",
+            "default": false
           }
         },
         "type": "object",
         "required": [
           "id",
-          "cycleItemId",
-          "userId",
-          "text",
-          "createdAt"
+          "content",
+          "authorId",
+          "createdAt",
+          "updatedAt",
+          "parentId",
+          "parentType"
         ],
         "title": "Note"
+      },
+      "NoteCreate": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "title": "Content",
+            "description": "HTML content from the rich text editor, can include images"
+          },
+          "parentId": {
+            "type": "string",
+            "title": "Parentid",
+            "description": "ID of the parent entity (Cycle, CycleMapInfo, CycleItem, or composite key)"
+          },
+          "parentType": {
+            "type": "string",
+            "title": "Parenttype",
+            "enum": ["cycle", "map", "item", "objectType"]
+          },
+          "isPinned": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ispinned",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "content",
+          "parentId",
+          "parentType"
+        ],
+        "title": "NoteCreate"
+      },
+      "NoteUpdate": {
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content",
+            "description": "HTML content from the rich text editor, can include images"
+          },
+          "isPinned": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ispinned"
+          }
+        },
+        "type": "object",
+        "title": "NoteUpdate"
       },
       "Scope": {
         "properties": {

@@ -761,7 +761,7 @@ const CycleBuilder: React.FC<{
   onBack: () => void;
   onUpdateCycle: (cycle: Cycle) => void;
 }> = ({ cycle, onBack, onUpdateCycle }) => {
-    const { cycleItems, setCycleItems, users, scopes, setScopes, tests, maps, setMaps, configurations, setConfigurations, permissions, notes, setNotes, currentUser, bulkUpdateCycleItems } = useData();
+    const { cycleItems, setCycleItems, users, scopes, setScopes, tests, maps, setMaps, configurations, setConfigurations, permissions, notes, setNotes, currentUser, bulkUpdateCycleItems, createNote, updateNote } = useData();
     const [editingCycle, setEditingCycle] = useState<Cycle>(cycle);
     const [isAddTestModalOpen, setIsAddTestModalOpen] = useState(false);
     const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
@@ -986,27 +986,30 @@ const CycleBuilder: React.FC<{
         });
     };
 
-    const handleSaveNote = (noteContent: string, isPinned: boolean) => {
+    const handleSaveNote = async (noteContent: string, isPinned: boolean) => {
         if (!editingNoteTarget || !currentUser) return;
-        // NOTE: API endpoint for notes is not specified.
-        // This will only update local state.
+        
         const existingNote = notes.find(n => n.parentId === editingNoteTarget.id);
-        const now = new Date().toISOString();
 
-        if (existingNote) {
-            setNotes(prev => prev.map(n => n.id === existingNote.id ? { ...n, content: noteContent, isPinned, updatedAt: now, authorId: currentUser.id } : n));
-        } else {
-            const newNote: Note = {
-                id: `n-${Date.now()}`,
-                parentId: editingNoteTarget.id,
-                parentType: editingNoteTarget.type,
-                content: noteContent,
-                isPinned,
-                authorId: currentUser.id,
-                createdAt: now,
-                updatedAt: now,
-            };
-            setNotes(prev => [...prev, newNote]);
+        try {
+            if (existingNote) {
+                // Update existing note via API
+                await updateNote(existingNote.id, {
+                    content: noteContent,
+                    isPinned
+                });
+            } else {
+                // Create new note via API
+                await createNote({
+                    content: noteContent,
+                    parentId: editingNoteTarget.id,
+                    parentType: editingNoteTarget.type,
+                    isPinned
+                });
+            }
+        } catch (error) {
+            console.error('Failed to save note:', error);
+            alert(`Failed to save note: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     };
     
