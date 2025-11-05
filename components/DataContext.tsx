@@ -175,8 +175,15 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setMaps(mapsData || []);
         setConfigurations(configurationsData || []);
       } catch (err: any) {
-        // If the backend is not available, use mock data as fallback
-        if (err instanceof TypeError && err.message === 'Failed to fetch') {
+        // If the backend is not available (network error), use mock data as fallback
+        // Check for common network-related errors across different browsers/environments
+        const isNetworkError = (err instanceof TypeError && 
+          (err.message === 'Failed to fetch' || 
+           err.message.includes('NetworkError') ||
+           err.message.includes('Network request failed'))) ||
+          err.name === 'NetworkError';
+        
+        if (isNetworkError) {
           console.warn('Backend server is not available. Using mock data as fallback.');
           setFolders(initialFolders);
           setTests(initialTests);
