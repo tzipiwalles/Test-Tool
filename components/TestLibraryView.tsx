@@ -649,9 +649,18 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
     }
     const headers = headerRow.map(h => h.trim());
 
-    const requiredHeaders = ['name', 'folderPath'];
+    const requiredHeaders = ['name'];
+    const hasFolderPath = headers.includes('folderPath');
+    const hasFolderId = headers.includes('folderId');
+    
+    // Require either folderPath or folderId
     if (!requiredHeaders.every(h => headers.includes(h))) {
-        setImportStatus({ message: `CSV is missing required headers. Required: ${requiredHeaders.join(', ')}`, error: true });
+        setImportStatus({ message: `CSV is missing required header 'name'.`, error: true });
+        return;
+    }
+    
+    if (!hasFolderPath && !hasFolderId) {
+        setImportStatus({ message: `CSV must include either 'folderPath' or 'folderId' column.`, error: true });
         return;
     }
 
@@ -659,8 +668,11 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
     const updatedTests: { id: string, data: TestCreate }[] = [];
     const skippedTests: { row: number, name: string, reason: string }[] = [];
     
+    // Build caches for folder lookups
     const pathIdCache = new Map<string, string>();
+    const folderIdSet = new Set<string>();
     folders.forEach(f => {
+        folderIdSet.add(f.id);
         const path = folderPathMap.get(f.id);
         if (path) {
             pathIdCache.set(path, f.id);
@@ -672,21 +684,47 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
     nonEmptyRows.forEach((values, index) => {
       const row = headers.reduce((obj, key, i) => ({...obj, [key]: (values[i] || '').trim() }), {} as Record<string, string>);
 
-      if (!row.name || !row.folderPath) {
-          errors.push(`Row ${index + 2}: Missing required field 'name' or 'folderPath'.`);
+      if (!row.name) {
+          errors.push(`Row ${index + 2}: Missing required field 'name'.`);
           return;
       }
       
-      let folderId: UUID;
-      if (pathIdCache.has(row.folderPath)) {
-          folderId = pathIdCache.get(row.folderPath)!;
-      } else {
-          // Folder path does not exist in the backend
-          // Skip this test and inform the user
+      let folderId: UUID | undefined;
+      
+      // Priority 1: Use folderId if provided and valid
+      if (hasFolderId && row.folderId && row.folderId.trim()) {
+          const trimmedFolderId = row.folderId.trim();
+          if (folderIdSet.has(trimmedFolderId)) {
+              folderId = trimmedFolderId;
+          } else {
+              skippedTests.push({
+                row: index + 2,
+                name: row.name,
+                reason: `Folder with ID ${trimmedFolderId} not found. Please ensure the folder exists before importing.`
+              });
+              return;
+          }
+      }
+      // Priority 2: Use folderPath if folderId not used
+      else if (hasFolderPath && row.folderPath && row.folderPath.trim()) {
+          const trimmedPath = row.folderPath.trim();
+          if (pathIdCache.has(trimmedPath)) {
+              folderId = pathIdCache.get(trimmedPath)!;
+          } else {
+              skippedTests.push({
+                row: index + 2,
+                name: row.name,
+                reason: `Folder path "${trimmedPath}" does not exist. Please create the folder first.`
+              });
+              return;
+          }
+      }
+      // No folder specified
+      else {
           skippedTests.push({
             row: index + 2,
             name: row.name,
-            reason: `Folder path "${row.folderPath}" does not exist. Please create the folder first.`
+            reason: `No folder specified. Either 'folderId' or 'folderPath' must be provided.`
           });
           return;
       }
@@ -767,11 +805,34 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
     let resultMessage = 'Import completed:\n';
     if (createSuccess > 0) resultMessage += `✓ ${createSuccess} tests created\n`;
     if (updateSuccess > 0) resultMessage += `✓ ${updateSuccess} tests updated\n`;
-    if (skippedTests.length > 0) resultMessage += `⚠ ${skippedTests.length} tests skipped (folder path not found)\n`;
     if (createFailed > 0 || updateFailed > 0) {
       resultMessage += `✗ ${createFailed + updateFailed} tests failed\n`;
-      resultMessage += '\nFailure details:\n' + failedDetails.slice(0, MAX_DISPLAYED_ERRORS).join('\n');
-      if (failedDetails.length > MAX_DISPLAYED_ERRORS) resultMessage += `\n... and ${failedDetails.length - MAX_DISPLAYED_ERRORS} more errors`;
+    }
+    
+    // Add detailed failure information
+    if (createFailed > 0 || updateFailed > 0 || skippedTests.length > 0) {
+      resultMessage += '\nFailure details:\n';
+      
+      // Add API failures first
+      const displayedFailures = failedDetails.slice(0, MAX_DISPLAYED_ERRORS);
+      displayedFailures.forEach(detail => {
+        resultMessage += detail + '\n';
+      });
+      
+      // Add skipped tests (folder not found)
+      const remainingSpace = MAX_DISPLAYED_ERRORS - displayedFailures.length;
+      if (remainingSpace > 0 && skippedTests.length > 0) {
+        const skippedToShow = skippedTests.slice(0, remainingSpace);
+        skippedToShow.forEach(skipped => {
+          resultMessage += `Create test "${skipped.name}": ${skipped.reason}\n`;
+        });
+      }
+      
+      // Calculate total errors
+      const totalErrors = failedDetails.length + skippedTests.length;
+      if (totalErrors > MAX_DISPLAYED_ERRORS) {
+        resultMessage += `... and ${totalErrors - MAX_DISPLAYED_ERRORS} more errors`;
+      }
     }
     
     const hasErrors = createFailed > 0 || updateFailed > 0 || skippedTests.length > 0;
