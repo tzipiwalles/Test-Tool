@@ -261,12 +261,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       method: 'POST',
       body: JSON.stringify(noteData)
     });
-    if (newNote && newNote.id) {
-      setNotes(prev => [newNote, ...prev]);
-      return newNote;
-    } else {
-      throw new Error('Server did not return a valid note with an ID');
+    if (!newNote) {
+      throw new Error('Server did not return a response when creating note');
     }
+    if (!newNote.id) {
+      throw new Error('Server response is missing the note ID');
+    }
+    setNotes(prev => [newNote, ...prev]);
+    return newNote;
   };
 
   const updateNote = async (noteId: UUID, noteData: NoteUpdate): Promise<Note> => {
@@ -274,12 +276,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       method: 'PATCH',
       body: JSON.stringify(noteData)
     });
-    if (updatedNote && updatedNote.id) {
-      setNotes(prev => prev.map(n => n.id === noteId ? updatedNote : n));
-      return updatedNote;
-    } else {
-      throw new Error('Server did not return a valid updated note with an ID');
+    if (!updatedNote) {
+      throw new Error('Server did not return a response when updating note');
     }
+    if (!updatedNote.id) {
+      throw new Error('Server response is missing the note ID');
+    }
+    setNotes(prev => prev.map(n => n.id === noteId ? updatedNote : n));
+    return updatedNote;
   };
 
   const bulkUpdateCycleItems = async (payload: BulkCycleItemUpdatePayload | LegacyBulkCycleItemUpdatePayload) => {
