@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Folder, Test, Priority, TestStatus, TestStep, UUID, TestCreate } from '../types';
 import FolderTree from './FolderTree';
@@ -667,6 +668,62 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
         }
     });
     
+    // Keep track of newly created folders locally
+    const newFolders: Omit<Folder, 'children' | 'tests'>[] = [];
+    let folderIdCounter = 1;
+    if (folders.length > 0) {
+      const existingIds = folders
+        .map(f => {
+          const parts = f.id.split('-');
+          // Validate format is 'f-{number}'
+          if (parts.length === 2 && parts[0] === 'f') {
+            const num = parseInt(parts[1], 10);
+            return isNaN(num) ? 0 : num;
+          }
+          return 0;
+        })
+        .filter(id => id > 0);
+      folderIdCounter = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1;
+    }
+    
+    // Helper function to create folder hierarchy from a path
+    const ensureFolderPath = (path: string): UUID => {
+      if (pathIdCache.has(path)) {
+        return pathIdCache.get(path)!;
+      }
+      
+      // Parse the path and create folders as needed
+      const parts = path.split('/').filter(p => p.length > 0);
+      if (parts.length === 0) {
+        throw new Error('Invalid folder path: path is empty');
+      }
+      
+      let currentPath = '';
+      let parentId: UUID | null = null;
+      
+      for (const part of parts) {
+        currentPath += '/' + part;
+        
+        if (pathIdCache.has(currentPath)) {
+          parentId = pathIdCache.get(currentPath)!;
+        } else {
+          // Create new folder
+          const newFolderId = `f-${folderIdCounter++}`;
+          const newFolder: Omit<Folder, 'children' | 'tests'> = {
+            id: newFolderId,
+            name: part,
+            parentId: parentId,
+            path: currentPath
+          };
+          newFolders.push(newFolder);
+          pathIdCache.set(currentPath, newFolderId);
+          parentId = newFolderId;
+        }
+      }
+      
+      return parentId!;
+    };
+    
     let errors: string[] = [];
 
     nonEmptyRows.forEach((values, index) => {
@@ -677,18 +734,17 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
           return;
       }
       
+      // Ensure folder path exists, creating it if necessary
       let folderId: UUID;
-      if (pathIdCache.has(row.folderPath)) {
-          folderId = pathIdCache.get(row.folderPath)!;
-      } else {
-          // Folder path does not exist in the backend
-          // Skip this test and inform the user
-          skippedTests.push({
-            row: index + 2,
-            name: row.name,
-            reason: `Folder path "${row.folderPath}" does not exist. Please create the folder first.`
-          });
-          return;
+      try {
+        folderId = ensureFolderPath(row.folderPath);
+      } catch (error) {
+        skippedTests.push({
+          row: index + 2,
+          name: row.name,
+          reason: `Failed to create folder path "${row.folderPath}": ${error instanceof Error ? error.message : String(error)}`
+        });
+        return;
       }
       
       const steps: TestStep[] = (row.steps || '').split('@@').map((s, i) => {
@@ -750,6 +806,12 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
     const updateSuccess = updateResults.filter(r => r.status === 'fulfilled').length;
     const updateFailed = updateResults.filter(r => r.status === 'rejected').length;
 
+    // Add newly created folders to the state after tests are successfully processed
+    // This ensures folders are only added if there's actual progress
+    if (newFolders.length > 0 && (createSuccess > 0 || updateSuccess > 0)) {
+      setFolders(prev => [...prev, ...newFolders]);
+    }
+
     // Collect error details
     const failedDetails: string[] = [];
     createResults.forEach((result, index) => {
@@ -765,9 +827,10 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
     
     // Build result message
     let resultMessage = 'Import completed:\n';
+    if (newFolders.length > 0) resultMessage += `✓ ${newFolders.length} folders created\n`;
     if (createSuccess > 0) resultMessage += `✓ ${createSuccess} tests created\n`;
     if (updateSuccess > 0) resultMessage += `✓ ${updateSuccess} tests updated\n`;
-    if (skippedTests.length > 0) resultMessage += `⚠ ${skippedTests.length} tests skipped (folder path not found)\n`;
+    if (skippedTests.length > 0) resultMessage += `⚠ ${skippedTests.length} tests skipped\n`;
     if (createFailed > 0 || updateFailed > 0) {
       resultMessage += `✗ ${createFailed + updateFailed} tests failed\n`;
       resultMessage += '\nFailure details:\n' + failedDetails.slice(0, MAX_DISPLAYED_ERRORS).join('\n');

@@ -149,7 +149,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           authedFetch(`${API_BASE_URL}/folders`),
           authedFetch(`${API_BASE_URL}/tests`),
           authedFetch(`${API_BASE_URL}/cycles`),
-          authedFetch(`${API_BASE_URL}/cycle_items`), // Note: OpenAPI spec uses cycle-items but keeping cycle_items for now
+          authedFetch(`${API_BASE_URL}/cycle_items`), // Note: OpenAPI spec uses cycle_items but keeping cycle_items for now
           authedFetch(`${API_BASE_URL}/scopes`),
           authedFetch(`${API_BASE_URL}/notes`),
           authedFetch(`${API_BASE_URL}/maps`),
@@ -330,7 +330,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     try {
       // Make the API call with the correct format
-      await authedFetch(`${API_BASE_URL}/cycle-items/bulk_update`, {
+      await authedFetch(`${API_BASE_URL}/cycle_items/bulk_update`, {
         method: 'PATCH',
         body: JSON.stringify(apiPayload),
       });
