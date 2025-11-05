@@ -11,6 +11,8 @@ import {
     CycleItem,
     Scope,
     Note,
+    NoteCreate,
+    NoteUpdate,
     Permissions,
     BulkTestUpdatePayload,
     BulkCycleItemUpdatePayload,
@@ -40,6 +42,8 @@ interface DataContextType {
   setScopes: React.Dispatch<React.SetStateAction<Scope[]>>;
   notes: Note[];
   setNotes: React.Dispatch<React.SetStateAction<Note[]>>;
+  createNote: (noteData: NoteCreate) => Promise<Note>;
+  updateNote: (noteId: UUID, noteData: NoteUpdate) => Promise<Note>;
   maps: string[];
   setMaps: React.Dispatch<React.SetStateAction<string[]>>;
   configurations: string[];
@@ -252,6 +256,36 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const createNote = async (noteData: NoteCreate): Promise<Note> => {
+    const newNote = await authedFetch(`${API_BASE_URL}/notes`, {
+      method: 'POST',
+      body: JSON.stringify(noteData)
+    });
+    if (!newNote) {
+      throw new Error('Server did not return a response when creating note');
+    }
+    if (!newNote.id) {
+      throw new Error('Server response is missing the note ID');
+    }
+    setNotes(prev => [newNote, ...prev]);
+    return newNote;
+  };
+
+  const updateNote = async (noteId: UUID, noteData: NoteUpdate): Promise<Note> => {
+    const updatedNote = await authedFetch(`${API_BASE_URL}/notes/${noteId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(noteData)
+    });
+    if (!updatedNote) {
+      throw new Error('Server did not return a response when updating note');
+    }
+    if (!updatedNote.id) {
+      throw new Error('Server response is missing the note ID');
+    }
+    setNotes(prev => prev.map(n => n.id === noteId ? updatedNote : n));
+    return updatedNote;
+  };
+
   const bulkUpdateCycleItems = async (payload: BulkCycleItemUpdatePayload | LegacyBulkCycleItemUpdatePayload) => {
     const originalCycleItems = [...cycleItems];
     
@@ -366,6 +400,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setScopes,
     notes,
     setNotes,
+    createNote,
+    updateNote,
     maps,
     setMaps,
     configurations,

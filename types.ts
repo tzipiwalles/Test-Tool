@@ -238,3 +238,22 @@ export interface Note {
   parentType: NoteParentType;
   isPinned?: boolean;
 }
+
+/**
+ * Type for creating a new note.
+ * It omits backend-generated fields like id, authorId, createdAt, and updatedAt.
+ */
+export interface NoteCreate {
+  content: string;
+  parentId: UUID;
+  parentType: NoteParentType;
+  isPinned?: boolean;
+}
+
+/**
+ * Type for updating an existing note.
+ */
+export interface NoteUpdate {
+  content?: string;
+  isPinned?: boolean;
+}
