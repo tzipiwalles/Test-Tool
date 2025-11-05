@@ -17,7 +17,17 @@ import {
     LegacyBulkCycleItemUpdatePayload,
     CycleItemUpdate,
 } from '../types';
-import { initialUsers } from '../data/mockData';
+import { 
+  initialUsers,
+  initialFolders,
+  initialTests,
+  initialCycles,
+  initialCycleItems,
+  initialScopes,
+  initialNotes,
+  initialMaps,
+  initialConfigurations
+} from '../data/mockData';
 
 interface DataContextType {
   users: User[];
@@ -165,12 +175,21 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setMaps(mapsData || []);
         setConfigurations(configurationsData || []);
       } catch (err: any) {
+        // If the backend is not available, use mock data as fallback
         if (err instanceof TypeError && err.message === 'Failed to fetch') {
-          setError(`Connection to the server failed. Please ensure the backend is running at ${API_BASE_URL} and check for CORS issues.`);
+          console.warn('Backend server is not available. Using mock data as fallback.');
+          setFolders(initialFolders);
+          setTests(initialTests);
+          setCycles(initialCycles);
+          setCycleItems(initialCycleItems);
+          setScopes(initialScopes);
+          setNotes(initialNotes);
+          setMaps(initialMaps);
+          setConfigurations(initialConfigurations);
         } else {
           setError(err?.message || 'Unknown error');
+          console.error('Failed to fetch data from API:', err);
         }
-        console.error('Failed to fetch data from API:', err);
       } finally {
         setIsLoading(false);
       }
