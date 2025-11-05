@@ -727,6 +727,12 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
           return;
       }
       
+      // Safety check: ensure folderId was set (should never happen due to early returns above)
+      if (!folderId) {
+          errors.push(`Row ${index + 2}: Internal error - folder ID not set for test "${row.name}".`);
+          return;
+      }
+      
       const steps: TestStep[] = (row.steps || '').split('@@').map((s, i) => {
           const [action, expected] = s.split('||');
           return { step_no: i + 1, action: action || '', expected: expected || '' };
