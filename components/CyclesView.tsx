@@ -182,7 +182,12 @@ const CyclesView: React.FC = () => {
       setIsNewCycleModalOpen(false);
     } catch (error) {
       console.error('Failed to create cycle:', error);
-      alert(`Failed to create cycle: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setImportStatus({ 
+        message: `Failed to create cycle: ${error instanceof Error ? error.message : 'Unknown error'}`, 
+        error: true 
+      });
+      setIsImportModalOpen(true);
+      setIsNewCycleModalOpen(false);
     }
   };
 
@@ -204,10 +209,9 @@ const CyclesView: React.FC = () => {
         refVersion: '', // Clear ref version
         cycleType: cycleToDuplicate.cycleType,
         mapsInfo: (cycleToDuplicate.mapsInfo || []).map(info => ({
-          mapName: info.mapName, // Keep map name
-          mainMapLink: undefined,
-          refMapLink: undefined,
-        })) as CycleMapInfo[],
+          ...info,
+          id: `mi-${Date.now()}-${Math.random().toString(36).substring(2,9)}`,
+        })),
       };
 
       await createCycle(newCycleData);
@@ -216,10 +220,17 @@ const CyclesView: React.FC = () => {
       // They would need to be created separately once the API endpoints are available.
       // For now, the cycle will be created but will be empty (no scopes or items).
       
-      alert('Cycle duplicated successfully! Note: Scopes and test items were not copied as the backend does not yet support this functionality.');
+      setImportStatus({ 
+        message: 'Cycle duplicated successfully!\n\nNote: Scopes and test items were not copied as the backend does not yet support this functionality.' 
+      });
+      setIsImportModalOpen(true);
     } catch (error) {
       console.error('Failed to duplicate cycle:', error);
-      alert(`Failed to duplicate cycle: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setImportStatus({ 
+        message: `Failed to duplicate cycle: ${error instanceof Error ? error.message : 'Unknown error'}`, 
+        error: true 
+      });
+      setIsImportModalOpen(true);
     }
   };
 
@@ -388,16 +399,31 @@ const CyclesView: React.FC = () => {
     const firstRow = headers.reduce((obj, key, i) => ({...obj, [key]: (nonEmptyRows[0][i] || '').trim() }), {} as Record<string, string>);
     let errors: string[] = [];
 
-    let mapsInfo: Omit<CycleMapInfo, 'id'>[] = [];
+    let mapsInfo: CycleMapInfo[] = [];
     if (headers.includes('cycle_mapsInfo_json') && firstRow.cycle_mapsInfo_json) {
         try {
             const parsedMapsInfo = JSON.parse(firstRow.cycle_mapsInfo_json);
             if (Array.isArray(parsedMapsInfo)) {
-                mapsInfo = parsedMapsInfo;
+                // Add IDs to map info objects since backend expects them
+                mapsInfo = parsedMapsInfo.map((info: Omit<CycleMapInfo, 'id'>, index: number) => ({
+                    ...info,
+                    id: `mi-${Date.now()}-${index}-${Math.random().toString(36).substring(2, 9)}`,
+                }));
             }
         } catch (e) {
             errors.push(`Warning: Could not parse 'cycle_mapsInfo_json'. Map information will be ignored.`);
         }
+    }
+
+    // Validate cycle type
+    let cycleType: CycleType | undefined = undefined;
+    if (firstRow.cycle_type) {
+      const typeValue = firstRow.cycle_type as CycleType;
+      if (Object.values(CycleType).includes(typeValue)) {
+        cycleType = typeValue;
+      } else {
+        errors.push(`Warning: Invalid cycle type '${firstRow.cycle_type}'. Using default.`);
+      }
     }
 
     const newCycleData: CycleCreate = {
@@ -406,8 +432,8 @@ const CyclesView: React.FC = () => {
       labels: (firstRow.cycle_labels || '').split(',').map(l => l.trim()).filter(Boolean),
       version: firstRow.cycle_version,
       refVersion: firstRow.cycle_refVersion,
-      cycleType: firstRow.cycle_type as any,
-      mapsInfo: mapsInfo as CycleMapInfo[],
+      cycleType: cycleType,
+      mapsInfo: mapsInfo,
     };
 
     try {
