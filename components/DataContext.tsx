@@ -16,8 +16,21 @@ import {
     BulkCycleItemUpdatePayload,
     LegacyBulkCycleItemUpdatePayload,
     CycleItemUpdate,
+    TestStatus,
+    CycleStatus,
+    CycleItemResult,
 } from '../types';
-import { initialUsers } from '../data/mockData';
+import { 
+    initialUsers,
+    initialFolders,
+    initialTests,
+    initialCycles,
+    initialCycleItems,
+    initialScopes,
+    initialNotes,
+    initialMaps,
+    initialConfigurations
+} from '../data/mockData';
 
 interface DataContextType {
   users: User[];
@@ -53,131 +66,19 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-// אם את מריצה את השרת על פורט אחר/דומיין אחר – עדכני כאן
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
-
-// מיפוי טוקנים “דמי” להתחזות למשתמשים שונים
-const USER_ID_TO_TOKEN_MAP: Record<string, string> = {
-  "u-1": "token-maintainer-tzipi",
-  "u-2": "token-lead-michelle",
-  "u-3": "token-lead-halima",
-  "u-4": "token-analyst-racheli",
-  "u-5": "token-viewer-dana",
-  "u-6": "token-analyst-yael",
-  "u-7": "token-maintainer-tal",
-  "u-8": "token-analyst-tamar",
-  "u-9": "token-analyst-alex"
-};
-
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [users] = useState<User[]>(initialUsers);
   const [currentUser, setCurrentUser] = useState<User | null>(initialUsers[0] || null);
-  const [folders, setFolders] = useState<Omit<Folder, 'children' | 'tests'>[]>([]);
-  const [tests, setTests] = useState<Test[]>([]);
-  const [cycles, setCycles] = useState<Cycle[]>([]);
-  const [cycleItems, setCycleItems] = useState<CycleItem[]>([]);
-  const [scopes, setScopes] = useState<Scope[]>([]);
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [maps, setMaps] = useState<string[]>([]);
-  const [configurations, setConfigurations] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [folders, setFolders] = useState<Omit<Folder, 'children' | 'tests'>[]>(initialFolders);
+  const [tests, setTests] = useState<Test[]>(initialTests);
+  const [cycles, setCycles] = useState<Cycle[]>(initialCycles);
+  const [cycleItems, setCycleItems] = useState<CycleItem[]>(initialCycleItems);
+  const [scopes, setScopes] = useState<Scope[]>(initialScopes);
+  const [notes, setNotes] = useState<Note[]>(initialNotes);
+  const [maps, setMaps] = useState<string[]>(initialMaps);
+  const [configurations, setConfigurations] = useState<string[]>(initialConfigurations);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // ---- נקודת מפתח: שליחה כ־Bearer ותמיכה חכמה בכותרות ----
-  const authedFetch = useCallback(async (url: string, options: RequestInit = {}) => {
-    const token = currentUser ? USER_ID_TO_TOKEN_MAP[currentUser.id] : null;
-
-    // נתחיל מכותרות בסיס
-    const headers = new Headers(options.headers);
-    headers.set('Accept', 'application/json');
-
-    // נגדיר Content-Type רק אם יש body מסוג מחרוזת/JSON
-    const hasStringBody = typeof options.body === 'string';
-    if (hasStringBody && !headers.has('Content-Type')) {
-      headers.set('Content-Type', 'application/json');
-    }
-
-    // אופס… אם אין משתמש נוכחי – נכשיל מוקדם
-    if (!token) {
-      throw new Error('No token for current user');
-    }
-
-    // חשוב: מעבר ל־Bearer במקום Token
-    headers.set('Authorization', `Bearer ${token}`);
-
-    const response = await fetch(url, { ...options, headers });
-
-    // טיפול בשגיאות HTTP עם הודעה שימושית
-    if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      if (response.status === 401) {
-        throw new Error(`401 Unauthorized – בדקי את השרת והטוקן. ${text}`);
-      }
-      if (response.status === 403) {
-        throw new Error(`403 Forbidden – ייתכן שלמשתמש אין ההרשאות הנדרשות או שהטוקן לא מזוהה בצד שרת. ${text}`);
-      }
-      throw new Error(`API ${response.status} for ${url}: ${text}`);
-    }
-
-    const contentType = response.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      return response.json();
-    }
-    return null;
-  }, [currentUser]);
-
-  useEffect(() => {
-    const fetchAll = async () => {
-      if (!currentUser) {
-        setError("No user selected for authentication.");
-        setIsLoading(false);
-        return;
-      }
-      setIsLoading(true);
-      setError(null);
-      try {
-        const [
-          foldersData,
-          testsData,
-          cyclesData,
-          cycleItemsData,
-          scopesData,
-          notesData,
-          mapsData,
-          configurationsData
-        ] = await Promise.all([
-          authedFetch(`${API_BASE_URL}/folders`),
-          authedFetch(`${API_BASE_URL}/tests`),
-          authedFetch(`${API_BASE_URL}/cycles`),
-          authedFetch(`${API_BASE_URL}/cycle_items`), // Note: OpenAPI spec uses cycle_items but keeping cycle_items for now
-          authedFetch(`${API_BASE_URL}/scopes`),
-          authedFetch(`${API_BASE_URL}/notes`),
-          authedFetch(`${API_BASE_URL}/maps`),
-          authedFetch(`${API_BASE_URL}/configurations`),
-        ]);
-
-        setFolders(foldersData || []);
-        setTests(testsData || []);
-        setCycles(cyclesData || []);
-        setCycleItems(cycleItemsData || []);
-        setScopes(scopesData || []);
-        setNotes(notesData || []);
-        setMaps(mapsData || []);
-        setConfigurations(configurationsData || []);
-      } catch (err: any) {
-        if (err instanceof TypeError && err.message === 'Failed to fetch') {
-          setError(`Connection to the server failed. Please ensure the backend is running at ${API_BASE_URL} and check for CORS issues.`);
-        } else {
-          setError(err?.message || 'Unknown error');
-        }
-        console.error('Failed to fetch data from API:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchAll();
-  }, [currentUser, authedFetch]);
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
@@ -203,145 +104,97 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return { isViewer, canAddNotes, canRunTests, canEditCycles, canCreateCycles, canEditLibrary };
   }, [currentUser]);
 
-  // --- פעולות CRUD מונעות API ---
+  // --- Mocked CRUD operations ---
 
   const createTest = async (testData: TestCreate) => {
-    const newTest = await authedFetch(`${API_BASE_URL}/tests`, {
-      method: 'POST',
-      body: JSON.stringify(testData)
-    });
-    if (newTest && newTest.id) {
-      setTests(prev => [newTest, ...prev]);
-    } else {
-      throw new Error('Server did not return a valid test with an ID');
-    }
+    const newTest: Test = {
+      ...testData,
+      id: `t-${Date.now()}`,
+      status: TestStatus.ACTIVE,
+      updatedAt: new Date().toISOString().split('T')[0],
+      updatedBy: currentUser?.displayName || 'User',
+    };
+    setTests(prev => [newTest, ...prev]);
   };
 
   const updateTest = async (testId: UUID, testData: Partial<Test>) => {
-    const updated = await authedFetch(`${API_BASE_URL}/tests/${testId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(testData)
-    });
-    if (updated && updated.id) {
-      setTests(prev => prev.map(t => t.id === testId ? updated : t));
-    } else {
-      throw new Error('Server did not return a valid updated test with an ID');
-    }
+    setTests(prev => prev.map(t => t.id === testId ? { 
+        ...t, 
+        ...testData,
+        updatedAt: new Date().toISOString().split('T')[0],
+        updatedBy: currentUser?.displayName || 'User',
+    } as Test : t));
   };
 
   const bulkUpdateTests = async (payload: BulkTestUpdatePayload) => {
-    const updated: Test[] = await authedFetch(`${API_BASE_URL}/tests/bulk_update`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload)
-    });
-    if (updated) {
-      const m = new Map(updated.map(t => [t.id, t]));
-      setTests(prev => prev.map(t => m.get(t.id) || t));
-    }
+    const newUpdatedAt = new Date().toISOString().split('T')[0];
+    const updatedBy = currentUser?.displayName || 'User';
+    const testIds = new Set(payload.testIds);
+
+    setTests(prev => prev.map(t => {
+        if (testIds.has(t.id)) {
+            return {
+                ...t,
+                ...payload.updates,
+                updatedAt: newUpdatedAt,
+                updatedBy: updatedBy,
+            };
+        }
+        return t;
+    }));
   };
 
   const createCycle = async (cycleData: CycleCreate) => {
-    const newCycle = await authedFetch(`${API_BASE_URL}/cycles`, {
-      method: 'POST',
-      body: JSON.stringify(cycleData)
-    });
-    if (newCycle && newCycle.id) {
-      setCycles(prev => [newCycle, ...prev]);
-    } else {
-      throw new Error('Server did not return a valid cycle with an ID');
-    }
+    const newCycle: Cycle = {
+      ...cycleData,
+      id: `c-${Date.now()}`,
+      status: CycleStatus.DRAFT,
+      updatedAt: new Date().toISOString().split('T')[0],
+    };
+    setCycles(prev => [newCycle, ...prev]);
   };
 
   const bulkUpdateCycleItems = async (payload: BulkCycleItemUpdatePayload | LegacyBulkCycleItemUpdatePayload) => {
-    const originalCycleItems = [...cycleItems];
-    
-    // Helper to check if payload is legacy format
     const isLegacyFormat = (p: any): p is LegacyBulkCycleItemUpdatePayload => {
-      return 'itemIds' in p && 'updates' in p && Array.isArray(p.itemIds);
+        return 'itemIds' in p && 'updates' in p && Array.isArray(p.itemIds);
     };
 
-    // Transform legacy format to new format if needed
-    let apiPayload: BulkCycleItemUpdatePayload;
-    let updatedIds: Set<UUID>;
-    let sharedUpdates: Partial<CycleItem>;
-
     if (isLegacyFormat(payload)) {
-      // Legacy format: { itemIds: [...], updates: {...} }
-      updatedIds = new Set(payload.itemIds);
-      sharedUpdates = payload.updates;
-      
-      // Transform to new format for API: { updates: [{ id: "...", ... }] }
-      apiPayload = {
-        updates: payload.itemIds.map(id => {
-          const update: CycleItemUpdate = { id };
-          if (payload.updates.assigneeId !== undefined) update.assigneeId = payload.updates.assigneeId;
-          if (payload.updates.result !== undefined) update.result = payload.updates.result;
-          if (payload.updates.map !== undefined) update.map = payload.updates.map;
-          if (payload.updates.configurations !== undefined) update.configurations = payload.updates.configurations;
-          return update;
-        })
-      };
+        const updatedIds = new Set(payload.itemIds);
+        const sharedUpdates = payload.updates;
+        const newUpdatedAt = new Date().toISOString().split('T')[0];
+        setCycleItems(prev =>
+            prev.map(item => {
+                if (updatedIds.has(item.id)) {
+                    return {
+                        ...item,
+                        ...sharedUpdates,
+                        updatedAt: newUpdatedAt,
+                    };
+                }
+                return item;
+            })
+        );
     } else {
-      // New format: { updates: [{ id: "...", ... }] }
-      apiPayload = payload;
-      updatedIds = new Set(payload.updates.map(u => u.id));
-      
-      // For optimistic update, we need to extract common updates
-      const updatesMap = new Map(payload.updates.map(u => [u.id, u]));
-      sharedUpdates = {}; // Will apply individual updates below
-      
-      // Optimistically update with individual item changes
-      setCycleItems(prev =>
-        prev.map(item => {
-          const update = updatesMap.get(item.id);
-          if (update) {
-            const changes: Partial<CycleItem> = {};
-            if (update.assigneeId !== undefined) changes.assigneeId = update.assigneeId;
-            if (update.result !== undefined) changes.result = update.result as CycleItemResult;
-            if (update.map !== undefined) changes.map = update.map;
-            if (update.configurations !== undefined) changes.configurations = update.configurations;
-            return {
-              ...item,
-              ...changes,
-              updatedAt: new Date().toISOString().split('T')[0],
-            };
-          }
-          return item;
-        })
-      );
-    }
-    
-    // For legacy format, do the optimistic update
-    if (isLegacyFormat(payload)) {
-      const newUpdatedAt = new Date().toISOString().split('T')[0];
-      setCycleItems(prev =>
-        prev.map(item => {
-          if (updatedIds.has(item.id)) {
-            return {
-              ...item,
-              ...sharedUpdates,
-              updatedAt: newUpdatedAt,
-            };
-          }
-          return item;
-        })
-      );
-    }
-
-    try {
-      // Make the API call with the correct format
-      await authedFetch(`${API_BASE_URL}/cycle_items/bulk_update`, {
-        method: 'PATCH',
-        body: JSON.stringify(apiPayload),
-      });
-      // Success: The optimistic update is now considered permanent for this session.
-    } catch (error) {
-      console.error("Failed to update cycle items:", error);
-      // On failure, revert to the original state and show an error.
-      setCycleItems(originalCycleItems);
-      setError(`Failed to save changes: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      // Clear the error message after a few seconds.
-      setTimeout(() => setError(null), 5000);
+        const updatesMap = new Map(payload.updates.map(u => [u.id, u]));
+        setCycleItems(prev =>
+            prev.map(item => {
+                const update = updatesMap.get(item.id);
+                if (update) {
+                    const changes: Partial<CycleItem> = {};
+                    if (update.assigneeId !== undefined) changes.assigneeId = update.assigneeId;
+                    if (update.result !== undefined) changes.result = update.result as CycleItemResult;
+                    if (update.map !== undefined) changes.map = update.map;
+                    if (update.configurations !== undefined) changes.configurations = update.configurations;
+                    return {
+                        ...item,
+                        ...changes,
+                        updatedAt: new Date().toISOString().split('T')[0],
+                    };
+                }
+                return item;
+            })
+        );
     }
   };
 
@@ -376,20 +229,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     isLoading,
     error
   };
-
-  if (isLoading) {
-    return <div className="flex items-center justify-center h-screen w-screen bg-gray-50 dark:bg-gray-950 text-gray-700 dark:text-gray-300">טוען נתונים...</div>;
-  }
-
-  if (error) {
-    return <div className="flex items-center justify-center h-screen w-screen bg-red-50 text-red-700 p-4">
-      <div className="text-center">
-        <h2 className="text-xl font-bold mb-2">שגיאת תקשורת</h2>
-        <p>{error}</p>
-        <p className="mt-2 text-sm">אנא ודאי שהשרת פועל בכתובת: {API_BASE_URL}</p>
-      </div>
-    </div>;
-  }
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 };
