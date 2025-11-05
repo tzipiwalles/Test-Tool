@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { Cycle, CycleItem, CycleItemResult, CycleStatus, Scope, ScopeName, Test, CycleMapInfo, CycleType } from '../types';
+import { Cycle, CycleItem, CycleItemResult, CycleStatus, Scope, ScopeName, Test, CycleMapInfo, CycleType, CycleCreate } from '../types';
 import CycleBuilder from './CycleBuilder';
 import { PlusIcon } from './icons/PlusIcon';
 import { useData } from './DataContext';
@@ -167,7 +167,7 @@ const CyclesView: React.FC = () => {
   const [importStatus, setImportStatus] = useState<{message: string, error?: boolean} | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleCreateCycle = (cycleData: { name: string; description: string; labels: string }) => {
+  const handleCreateCycle = async (cycleData: { name: string; description: string; labels: string }) => {
     // NOTE: version, refVersion, cycleType, mapsInfo are not in the modal.
     // The backend seems to require them. Sending empty/default values.
     const newCycleData = {
@@ -177,8 +177,18 @@ const CyclesView: React.FC = () => {
         version: "1.0", // Default value
         cycleType: CycleType.REGRESSION // Default value
     };
-    createCycle(newCycleData);
-    setIsNewCycleModalOpen(false);
+    try {
+      await createCycle(newCycleData);
+      setIsNewCycleModalOpen(false);
+    } catch (error) {
+      console.error('Failed to create cycle:', error);
+      setImportStatus({ 
+        message: `Failed to create cycle: ${error instanceof Error ? error.message : 'Unknown error'}`, 
+        error: true 
+      });
+      setIsImportModalOpen(true);
+      setIsNewCycleModalOpen(false);
+    }
   };
 
   const handleUpdateCycle = (updatedCycle: Cycle) => {
@@ -188,58 +198,42 @@ const CyclesView: React.FC = () => {
     setSelectedCycle(updatedCycle);
   };
 
-  const handleDuplicateCycle = (cycleToDuplicate: Cycle) => {
-    // NOTE: This logic is complex and relies on a complete view of data.
-    // Without a backend endpoint, this is a client-side only operation.
-    const newCycle: Cycle = {
-        ...cycleToDuplicate,
-        id: `c-${Date.now()}`,
+  const handleDuplicateCycle = async (cycleToDuplicate: Cycle) => {
+    try {
+      // Create the new cycle via API
+      const newCycleData: CycleCreate = {
         name: `Copy of ${cycleToDuplicate.name}`,
-        status: CycleStatus.DRAFT,
+        description: cycleToDuplicate.description,
+        labels: cycleToDuplicate.labels,
         version: '', // Clear version
         refVersion: '', // Clear ref version
-        updatedAt: new Date().toLocaleDateString(),
+        cycleType: cycleToDuplicate.cycleType,
         mapsInfo: (cycleToDuplicate.mapsInfo || []).map(info => ({
-            id: `mi-${Date.now()}-${Math.random().toString(36).substring(2,9)}`,
-            mapName: info.mapName, // Keep map name
-            mainMapLink: undefined,
-            refMapLink: undefined,
+          ...info,
+          id: `mi-${Date.now()}-${Math.random().toString(36).substring(2,9)}`,
         })),
-    };
+      };
 
-    const oldScopes = scopes.filter(s => s.cycleId === cycleToDuplicate.id);
-    const oldToNewScopeIdMap = new Map<string, string>();
-    const newScopes: Scope[] = oldScopes.map(scope => {
-        const newScopeId = `s-${Date.now()}-${Math.random().toString(36).substring(2,9)}`;
-        oldToNewScopeIdMap.set(scope.id, newScopeId);
-        return {
-            ...scope,
-            id: newScopeId,
-            cycleId: newCycle.id,
-        };
-    });
+      await createCycle(newCycleData);
 
-    const oldCycleItems = cycleItems.filter(item => item.cycleId === cycleToDuplicate.id);
-    const newCycleItems: CycleItem[] = oldCycleItems.map(item => {
-        const newScopeId = oldToNewScopeIdMap.get(item.scopeId);
-        if (!newScopeId) {
-            console.warn(`Could not find new scope for old scope ${item.scopeId}`);
-            return null;
-        }
-        return {
-            ...item,
-            id: `ci-${Date.now()}-${item.testId}-${Math.random().toString(36).substring(2, 9)}`,
-            cycleId: newCycle.id,
-            scopeId: newScopeId,
-            assigneeId: null,
-            result: CycleItemResult.NOT_RUN,
-            updatedAt: new Date().toLocaleDateString(),
-        };
-    }).filter((item): item is CycleItem => item !== null);
+      // Note: Scopes and cycle items creation is not supported by the backend API yet.
+      // They would need to be created separately once the API endpoints are available.
+      // For now, the cycle will be created but will be empty (no scopes or items).
+      
+      setImportStatus({ 
+        message: `Cycle duplicated successfully!
 
-    setCycles(prev => [newCycle, ...prev]);
-    setScopes(prev => [...prev, ...newScopes]);
-    setCycleItems(prev => [...prev, ...newCycleItems]);
+Note: Scopes and test items were not copied as the backend does not yet support this functionality.` 
+      });
+      setIsImportModalOpen(true);
+    } catch (error) {
+      console.error('Failed to duplicate cycle:', error);
+      setImportStatus({ 
+        message: `Failed to duplicate cycle: ${error instanceof Error ? error.message : 'Unknown error'}`, 
+        error: true 
+      });
+      setIsImportModalOpen(true);
+    }
   };
 
   const handleArchiveCycle = () => {
@@ -320,7 +314,7 @@ const CyclesView: React.FC = () => {
 
       try {
         const csvText = await file.text();
-        processCycleCSVData(csvText);
+        await processCycleCSVData(csvText);
       } catch (error) {
           setImportStatus({ message: `Error reading file: ${error instanceof Error ? error.message : String(error)}`, error: true });
       } finally {
@@ -330,9 +324,9 @@ const CyclesView: React.FC = () => {
       }
   };
 
-  const processCycleCSVData = (csvText: string) => {
+  const processCycleCSVData = async (csvText: string) => {
     // NOTE: This is a complex operation that should ideally be handled
-    // by a dedicated backend endpoint. This implementation is client-side only.
+    // by a dedicated backend endpoint. Currently only the cycle itself can be created via API.
     const parseCsv = (text: string): string[][] => {
         const rows: string[][] = [];
         let currentRow: string[] = [];
@@ -412,6 +406,7 @@ const CyclesView: React.FC = () => {
         try {
             const parsedMapsInfo = JSON.parse(firstRow.cycle_mapsInfo_json);
             if (Array.isArray(parsedMapsInfo)) {
+                // Add IDs to map info objects since backend expects them
                 mapsInfo = parsedMapsInfo.map((info: Omit<CycleMapInfo, 'id'>, index: number) => ({
                     ...info,
                     id: `mi-${Date.now()}-${index}-${Math.random().toString(36).substring(2, 9)}`,
@@ -422,100 +417,41 @@ const CyclesView: React.FC = () => {
         }
     }
 
-    const newCycle: Cycle = {
-      id: `c-${Date.now()}`,
+    // Validate cycle type
+    let cycleType: CycleType | undefined = undefined;
+    if (firstRow.cycle_type && Object.values(CycleType).includes(firstRow.cycle_type as CycleType)) {
+      cycleType = firstRow.cycle_type as CycleType;
+    } else if (firstRow.cycle_type) {
+      errors.push(`Warning: Invalid cycle type '${firstRow.cycle_type}'. Using default.`);
+    }
+
+    const newCycleData: CycleCreate = {
       name: `[IMPORT] ${firstRow.cycle_name || 'Untitled Cycle'}`,
       description: firstRow.cycle_description || '',
       labels: (firstRow.cycle_labels || '').split(',').map(l => l.trim()).filter(Boolean),
-      status: CycleStatus.DRAFT,
-      updatedAt: new Date().toLocaleDateString(),
       version: firstRow.cycle_version,
       refVersion: firstRow.cycle_refVersion,
-      cycleType: firstRow.cycle_type as any,
-      mapsInfo,
+      cycleType: cycleType,
+      mapsInfo: mapsInfo,
     };
-    
-    const newScopes: Scope[] = [];
-    const newCycleItems: CycleItem[] = [];
-    const scopeNameToIdMap = new Map<string, string>();
-    let itemsSkipped = 0;
 
-    nonEmptyRows.forEach((values, index) => {
-      const row = headers.reduce((obj, key, i) => ({...obj, [key]: (values[i] || '').trim() }), {} as Record<string, string>);
-
-      if (!row.test_id) {
-        errors.push(`Row ${index + 2}: Missing required field 'test_id'. Skipping row.`);
-        itemsSkipped++;
-        return;
-      }
+    try {
+      await createCycle(newCycleData);
       
-      const snapshotName = row.snapshot_name;
-      if (!snapshotName) {
-          errors.push(`Row ${index + 2}: 'snapshot_name' is missing or empty in the CSV. Skipping item.`);
-          itemsSkipped++;
-          return;
-      }
+      // Note: The backend does not yet support creating scopes and cycle items via API.
+      // Only the cycle metadata has been imported.
+      const warningsSection = errors.length > 0 ? `\n\nWarnings:\n${errors.join('\n')}` : '';
+      const message = `Import successful!
+- 1 cycle created: "${newCycleData.name}"
 
-      let scopeId: string;
-      const scopeName = (row.scope_name as ScopeName) || ScopeName.NONE;
-      if (scopeNameToIdMap.has(scopeName)) {
-        scopeId = scopeNameToIdMap.get(scopeName)!;
-      } else {
-        const newScope: Scope = {
-          id: `s-${Date.now()}-${newScopes.length}`,
-          cycleId: newCycle.id,
-          name: scopeName,
-        };
-        newScopes.push(newScope);
-        scopeId = newScope.id;
-        scopeNameToIdMap.set(scopeName, scopeId);
-      }
+Note: Scopes and test items were not imported as the backend does not yet support this functionality.
+The cycle has been created but is empty. You will need to add tests manually.${warningsSection}`;
       
-      const assignee = users.find(u => u.email === row.assignee_email);
-
-      const snapshotSteps = (row.snapshot_steps || '').split('@@').map((s, i) => {
-          const [action, expected] = s.split('||');
-          return { step_no: i + 1, action: action || '', expected: expected || '' };
-      }).filter(s => s.action || s.expected);
-
-      const newItem: CycleItem = {
-          id: `ci-${Date.now()}-${row.test_id}-${index}`,
-          cycleId: newCycle.id,
-          scopeId: scopeId,
-          testId: row.test_id,
-          testSnapshot: {
-            name: snapshotName,
-            steps: snapshotSteps,
-            labels: (row.snapshot_labels || '').split(',').map(l => l.trim()).filter(Boolean),
-            affectedObjectType: row.snapshot_affectedObjectType,
-            testMethod: row.snapshot_testMethod,
-          },
-          assigneeId: assignee?.id || null,
-          result: (row.result as CycleItemResult) || CycleItemResult.NOT_RUN,
-          updatedAt: new Date().toLocaleDateString(),
-          map: row.item_map || null,
-          configurations: (row.item_configurations || '').split(',').map(c => c.trim()).filter(Boolean),
-      };
-      newCycleItems.push(newItem);
-    });
-
-    if (errors.length > 5) {
-      setImportStatus({ message: `Import failed with too many errors (${errors.length}). Please check your file. First 5 errors:\n${errors.slice(0, 5).join('\n')}`, error: true });
-      return;
+      setImportStatus({ message });
+    } catch (error) {
+      console.error('Failed to import cycle:', error);
+      setImportStatus({ message: `Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`, error: true });
     }
-    
-    setCycles(prev => [newCycle, ...prev]);
-    setScopes(prev => [...prev, ...newScopes]);
-    setCycleItems(prev => [...prev, ...newCycleItems]);
-
-    let message = `Import successful!\n- 1 cycle created: "${newCycle.name}"\n- ${newScopes.length} scopes created.\n- ${newCycleItems.length} tests added.`;
-    if(itemsSkipped > 0) {
-      message += `\n- ${itemsSkipped} items were skipped.`;
-    }
-    if (errors.length > 0) {
-      message += `\n\nWarnings:\n${errors.join('\n')}`;
-    }
-    setImportStatus({ message });
   };
 
 
