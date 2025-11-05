@@ -692,27 +692,29 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
       let folderId: UUID | undefined;
       
       // Priority 1: Use folderId if provided and valid
-      if (hasFolderId && row.folderId) {
-          if (folderIdSet.has(row.folderId)) {
-              folderId = row.folderId;
+      if (hasFolderId && row.folderId && row.folderId.trim()) {
+          const trimmedFolderId = row.folderId.trim();
+          if (folderIdSet.has(trimmedFolderId)) {
+              folderId = trimmedFolderId;
           } else {
               skippedTests.push({
                 row: index + 2,
                 name: row.name,
-                reason: `Folder with ID ${row.folderId} not found. Please ensure the folder exists before importing.`
+                reason: `Folder with ID ${trimmedFolderId} not found. Please ensure the folder exists before importing.`
               });
               return;
           }
       }
       // Priority 2: Use folderPath if folderId not used
-      else if (hasFolderPath && row.folderPath) {
-          if (pathIdCache.has(row.folderPath)) {
-              folderId = pathIdCache.get(row.folderPath)!;
+      else if (hasFolderPath && row.folderPath && row.folderPath.trim()) {
+          const trimmedPath = row.folderPath.trim();
+          if (pathIdCache.has(trimmedPath)) {
+              folderId = pathIdCache.get(trimmedPath)!;
           } else {
               skippedTests.push({
                 row: index + 2,
                 name: row.name,
-                reason: `Folder path "${row.folderPath}" does not exist. Please create the folder first.`
+                reason: `Folder path "${trimmedPath}" does not exist. Please create the folder first.`
               });
               return;
           }
@@ -724,12 +726,6 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
             name: row.name,
             reason: `No folder specified. Either 'folderId' or 'folderPath' must be provided.`
           });
-          return;
-      }
-      
-      // Safety check: ensure folderId was set (should never happen due to early returns above)
-      if (!folderId) {
-          errors.push(`Row ${index + 2}: Internal error - folder ID not set for test "${row.name}".`);
           return;
       }
       
