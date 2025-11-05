@@ -221,7 +221,9 @@ const CyclesView: React.FC = () => {
       // For now, the cycle will be created but will be empty (no scopes or items).
       
       setImportStatus({ 
-        message: 'Cycle duplicated successfully!\n\nNote: Scopes and test items were not copied as the backend does not yet support this functionality.' 
+        message: `Cycle duplicated successfully!
+
+Note: Scopes and test items were not copied as the backend does not yet support this functionality.` 
       });
       setIsImportModalOpen(true);
     } catch (error) {
@@ -417,13 +419,10 @@ const CyclesView: React.FC = () => {
 
     // Validate cycle type
     let cycleType: CycleType | undefined = undefined;
-    if (firstRow.cycle_type) {
-      const typeValue = firstRow.cycle_type as CycleType;
-      if (Object.values(CycleType).includes(typeValue)) {
-        cycleType = typeValue;
-      } else {
-        errors.push(`Warning: Invalid cycle type '${firstRow.cycle_type}'. Using default.`);
-      }
+    if (firstRow.cycle_type && Object.values(CycleType).includes(firstRow.cycle_type as CycleType)) {
+      cycleType = firstRow.cycle_type as CycleType;
+    } else if (firstRow.cycle_type) {
+      errors.push(`Warning: Invalid cycle type '${firstRow.cycle_type}'. Using default.`);
     }
 
     const newCycleData: CycleCreate = {
@@ -441,13 +440,13 @@ const CyclesView: React.FC = () => {
       
       // Note: The backend does not yet support creating scopes and cycle items via API.
       // Only the cycle metadata has been imported.
-      let message = `Import successful!\n- 1 cycle created: "${newCycleData.name}"`;
-      message += `\n\nNote: Scopes and test items were not imported as the backend does not yet support this functionality.`;
-      message += `\nThe cycle has been created but is empty. You will need to add tests manually.`;
+      const warningsSection = errors.length > 0 ? `\n\nWarnings:\n${errors.join('\n')}` : '';
+      const message = `Import successful!
+- 1 cycle created: "${newCycleData.name}"
+
+Note: Scopes and test items were not imported as the backend does not yet support this functionality.
+The cycle has been created but is empty. You will need to add tests manually.${warningsSection}`;
       
-      if (errors.length > 0) {
-        message += `\n\nWarnings:\n${errors.join('\n')}`;
-      }
       setImportStatus({ message });
     } catch (error) {
       console.error('Failed to import cycle:', error);
