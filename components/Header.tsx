@@ -1,9 +1,10 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { useData } from './DataContext';
 import { UserIcon } from './icons/UserIcon';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
 import { User, UserRole } from '../types';
-import { LogoIcon } from './icons/LogoIcon';
+import { LogoIcon } from './icons/LogoIcon.svg';
 
 const getRoleName = (role: UserRole) => {
     switch (role) {

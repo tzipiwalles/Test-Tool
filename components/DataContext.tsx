@@ -1,240 +1,199 @@
-import React, { createContext, useContext, useState, useMemo, ReactNode, useCallback, useEffect } from 'react';
-import { 
-    UUID,
-    User,
-    UserRole,
-    Folder,
-    Test,
-    TestCreate,
-    Cycle,
-    CycleCreate,
-    CycleItem,
-    Scope,
-    Note,
-    Permissions,
-    BulkTestUpdatePayload,
-    BulkCycleItemUpdatePayload,
-    LegacyBulkCycleItemUpdatePayload,
-    CycleItemUpdate,
-    TestStatus,
-    CycleStatus,
-    CycleItemResult,
-} from '../types';
-import { 
-    initialUsers,
-    initialFolders,
-    initialTests,
-    initialCycles,
-    initialCycleItems,
-    initialScopes,
-    initialNotes,
-    initialMaps,
-    initialConfigurations
-} from '../data/mockData';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
+import { Folder, Test, Cycle, CycleItem, User, Scope, UserRole, Permissions, Note } from '../types';
+import * as api from '../lib/api';
+
+const getPermissions = (user: User | null): Permissions => {
+  const role = user?.role;
+
+  const canEditLibrary = role === UserRole.MAINTAINER;
+  const canCreateCycles = role === UserRole.MAINTAINER || role === UserRole.VALIDATION_LEAD;
+  const canEditCycles = role === UserRole.MAINTAINER || role === UserRole.VALIDATION_LEAD;
+  const canRunTests = role === UserRole.MAINTAINER || role === UserRole.VALIDATION_LEAD || role === UserRole.ANALYST;
+  const canAddNotes = role === UserRole.MAINTAINER || role === UserRole.VALIDATION_LEAD || role === UserRole.ANALYST;
+  const isViewer = role === UserRole.VIEWER;
+
+  return { canEditLibrary, canCreateCycles, canEditCycles, canRunTests, canAddNotes, isViewer };
+};
 
 interface DataContextType {
-  users: User[];
-  currentUser: User | null;
-  setCurrentUser: (user: User) => void;
   folders: Omit<Folder, 'children' | 'tests'>[];
-  setFolders: React.Dispatch<React.SetStateAction<Omit<Folder, 'children' | 'tests'>[]>>;
   tests: Test[];
-  setTests: React.Dispatch<React.SetStateAction<Test[]>>;
-  createTest: (testData: TestCreate) => Promise<void>;
-  updateTest: (testId: UUID, testData: Partial<Test>) => Promise<void>;
-  bulkUpdateTests: (payload: BulkTestUpdatePayload) => Promise<void>;
   cycles: Cycle[];
-  setCycles: React.Dispatch<React.SetStateAction<Cycle[]>>;
-  createCycle: (cycleData: CycleCreate) => Promise<void>;
-  cycleItems: CycleItem[];
-  setCycleItems: React.Dispatch<React.SetStateAction<CycleItem[]>>;
-  bulkUpdateCycleItems: (payload: BulkCycleItemUpdatePayload | LegacyBulkCycleItemUpdatePayload) => Promise<void>;
   scopes: Scope[];
-  setScopes: React.Dispatch<React.SetStateAction<Scope[]>>;
+  cycleItems: CycleItem[];
+  users: User[];
   notes: Note[];
-  setNotes: React.Dispatch<React.SetStateAction<Note[]>>;
   maps: string[];
-  setMaps: React.Dispatch<React.SetStateAction<string[]>>;
   configurations: string[];
+  setFolders: React.Dispatch<React.SetStateAction<Omit<Folder, 'children' | 'tests'>[]>>;
+  setTests: React.Dispatch<React.SetStateAction<Test[]>>;
+  setCycles: React.Dispatch<React.SetStateAction<Cycle[]>>;
+  setScopes: React.Dispatch<React.SetStateAction<Scope[]>>;
+  setCycleItems: React.Dispatch<React.SetStateAction<CycleItem[]>>;
+  setUsers: React.Dispatch<React.SetStateAction<User[]>>;
+  setNotes: React.Dispatch<React.SetStateAction<Note[]>>;
+  setMaps: React.Dispatch<React.SetStateAction<string[]>>;
   setConfigurations: React.Dispatch<React.SetStateAction<string[]>>;
-  permissions: Permissions;
+  isLoading: boolean;
   theme: 'light' | 'dark';
   toggleTheme: () => void;
-  isLoading: boolean;
-  error: string | null;
+  currentUser: User | null;
+  setCurrentUser: React.Dispatch<React.SetStateAction<User | null>>;
+  permissions: Permissions;
 }
 
-const DataContext = createContext<DataContextType | undefined>(undefined);
+const DataContext = createContext<DataContextType | null>(null);
 
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [users] = useState<User[]>(initialUsers);
-  const [currentUser, setCurrentUser] = useState<User | null>(initialUsers[0] || null);
-  const [folders, setFolders] = useState<Omit<Folder, 'children' | 'tests'>[]>(initialFolders);
-  const [tests, setTests] = useState<Test[]>(initialTests);
-  const [cycles, setCycles] = useState<Cycle[]>(initialCycles);
-  const [cycleItems, setCycleItems] = useState<CycleItem[]>(initialCycleItems);
-  const [scopes, setScopes] = useState<Scope[]>(initialScopes);
-  const [notes, setNotes] = useState<Note[]>(initialNotes);
-  const [maps, setMaps] = useState<string[]>(initialMaps);
-  const [configurations, setConfigurations] = useState<string[]>(initialConfigurations);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [folders, setFolders] = useState<Omit<Folder, 'children' | 'tests'>[]>([]);
+  const [tests, setTests] = useState<Test[]>([]);
+  const [cycles, setCycles] = useState<Cycle[]>([]);
+  const [scopes, setScopes] = useState<Scope[]>([]);
+  const [cycleItems, setCycleItems] = useState<CycleItem[]>([]);
+  const [notes, setNotes] = useState<Note[]>([]); // No API for notes, will be empty.
+  const [users, setUsers] = useState<User[]>([]);
+  const [maps, setMaps] = useState<string[]>([]);
+  const [configurations, setConfigurations] = useState<string[]>([]);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const permissions = useMemo(() => getPermissions(currentUser), [currentUser]);
+
+  const [isLoading, setIsLoading] = useState(true);
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
-      return 'dark';
+    if (typeof window !== 'undefined') {
+      const storedTheme = localStorage.getItem('theme');
+      if (storedTheme === 'light' || storedTheme === 'dark') {
+        return storedTheme;
+      }
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     }
-    return 'light';
+    return 'dark';
   });
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        const [usersData, foldersData, testsData, cyclesListData] = await Promise.all([
+          api.getUsers(),
+          api.getFolders(),
+          api.getTests(),
+          api.getCycles(),
+        ]);
+
+        setUsers(usersData);
+        if (usersData.length > 0) {
+          const maintainer = usersData.find(u => u.role === UserRole.MAINTAINER) || usersData[0];
+          setCurrentUser(maintainer);
+        }
+
+        setFolders(foldersData);
+        setTests(testsData);
+        
+        // The main /cycles endpoint returns a list, but we need details (scopes, items) for each one
+        const cycleDetailsPromises = cyclesListData.map(cycle => api.getCycleDetails(cycle.id));
+        const cycleDetailsData = await Promise.all(cycleDetailsPromises);
+
+        setCycles(cycleDetailsData);
+
+        const allScopes = cycleDetailsData.flatMap(detail => detail.scopes || []);
+        const allCycleItems = cycleDetailsData.flatMap(detail => detail.items || []);
+
+        setScopes(allScopes);
+        setCycleItems(allCycleItems);
+        
+        // Derive maps and configurations dynamically from all tests and cycle items
+        const mapSet = new Set<string>();
+        const configSet = new Set<string>();
+        
+        testsData.forEach(test => {
+          if (test.map) mapSet.add(test.map);
+          if (test.configuration) configSet.add(test.configuration);
+        });
+        allCycleItems.forEach(item => {
+          if (item.map) mapSet.add(item.map);
+          item.configurations.forEach(config => configSet.add(config));
+        });
+        
+        setMaps(Array.from(mapSet).sort((a,b) => a.localeCompare(b)));
+        setConfigurations(Array.from(configSet).sort((a,b) => a.localeCompare(b)));
+
+      } catch (error) {
+        console.error("Failed to fetch initial data from backend:", error);
+        // In a real app, we would set an error state here to show a message to the user.
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('theme', theme);
   }, [theme]);
 
-  const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
-
-  const permissions = useMemo(() => {
-    const role = currentUser?.role;
-    const isViewer = role === UserRole.VIEWER;
-    const canAddNotes = !!role;
-    const canRunTests = role === UserRole.ANALYST || role === UserRole.VALIDATION_LEAD || role === UserRole.MAINTAINER;
-    const canEditCycles = role === UserRole.VALIDATION_LEAD || role === UserRole.MAINTAINER;
-    const canCreateCycles = role === UserRole.VALIDATION_LEAD || role === UserRole.MAINTAINER;
-    const canEditLibrary = role === UserRole.MAINTAINER;
-    return { isViewer, canAddNotes, canRunTests, canEditCycles, canCreateCycles, canEditLibrary };
-  }, [currentUser]);
-
-  // --- Mocked CRUD operations ---
-
-  const createTest = async (testData: TestCreate) => {
-    const newTest: Test = {
-      ...testData,
-      id: `t-${Date.now()}`,
-      status: TestStatus.ACTIVE,
-      updatedAt: new Date().toISOString().split('T')[0],
-      updatedBy: currentUser?.displayName || 'User',
-    };
-    setTests(prev => [newTest, ...prev]);
-  };
-
-  const updateTest = async (testId: UUID, testData: Partial<Test>) => {
-    setTests(prev => prev.map(t => t.id === testId ? { 
-        ...t, 
-        ...testData,
-        updatedAt: new Date().toISOString().split('T')[0],
-        updatedBy: currentUser?.displayName || 'User',
-    } as Test : t));
-  };
-
-  const bulkUpdateTests = async (payload: BulkTestUpdatePayload) => {
-    const newUpdatedAt = new Date().toISOString().split('T')[0];
-    const updatedBy = currentUser?.displayName || 'User';
-    const testIds = new Set(payload.testIds);
-
-    setTests(prev => prev.map(t => {
-        if (testIds.has(t.id)) {
-            return {
-                ...t,
-                ...payload.updates,
-                updatedAt: newUpdatedAt,
-                updatedBy: updatedBy,
-            };
-        }
-        return t;
-    }));
-  };
-
-  const createCycle = async (cycleData: CycleCreate) => {
-    const newCycle: Cycle = {
-      ...cycleData,
-      id: `c-${Date.now()}`,
-      status: CycleStatus.DRAFT,
-      updatedAt: new Date().toISOString().split('T')[0],
-    };
-    setCycles(prev => [newCycle, ...prev]);
-  };
-
-  const bulkUpdateCycleItems = async (payload: BulkCycleItemUpdatePayload | LegacyBulkCycleItemUpdatePayload) => {
-    const isLegacyFormat = (p: any): p is LegacyBulkCycleItemUpdatePayload => {
-        return 'itemIds' in p && 'updates' in p && Array.isArray(p.itemIds);
-    };
-
-    if (isLegacyFormat(payload)) {
-        const updatedIds = new Set(payload.itemIds);
-        const sharedUpdates = payload.updates;
-        const newUpdatedAt = new Date().toISOString().split('T')[0];
-        setCycleItems(prev =>
-            prev.map(item => {
-                if (updatedIds.has(item.id)) {
-                    return {
-                        ...item,
-                        ...sharedUpdates,
-                        updatedAt: newUpdatedAt,
-                    };
-                }
-                return item;
-            })
-        );
-    } else {
-        const updatesMap = new Map(payload.updates.map(u => [u.id, u]));
-        setCycleItems(prev =>
-            prev.map(item => {
-                const update = updatesMap.get(item.id);
-                if (update) {
-                    const changes: Partial<CycleItem> = {};
-                    if (update.assigneeId !== undefined) changes.assigneeId = update.assigneeId;
-                    if (update.result !== undefined) changes.result = update.result as CycleItemResult;
-                    if (update.map !== undefined) changes.map = update.map;
-                    if (update.configurations !== undefined) changes.configurations = update.configurations;
-                    return {
-                        ...item,
-                        ...changes,
-                        updatedAt: new Date().toISOString().split('T')[0],
-                    };
-                }
-                return item;
-            })
-        );
-    }
+  const toggleTheme = () => {
+    setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
   };
 
   const value = {
-    users,
-    currentUser,
-    setCurrentUser,
     folders,
-    setFolders,
     tests,
-    setTests,
-    createTest,
-    updateTest,
-    bulkUpdateTests,
     cycles,
-    setCycles,
-    createCycle,
-    cycleItems,
-    setCycleItems,
-    bulkUpdateCycleItems,
     scopes,
-    setScopes,
+    cycleItems,
+    users,
     notes,
-    setNotes,
     maps,
-    setMaps,
     configurations,
+    setFolders,
+    setTests,
+    setCycles,
+    setScopes,
+    setCycleItems,
+    setUsers,
+    setNotes,
+    setMaps,
     setConfigurations,
-    permissions,
+    isLoading,
     theme,
     toggleTheme,
-    isLoading,
-    error
+    currentUser,
+    setCurrentUser,
+    permissions,
   };
 
-  return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
+  if (isLoading) {
+    return (
+        <div className="flex items-center justify-center h-screen w-screen bg-gray-50 dark:bg-gray-950">
+            <div className="flex items-center space-x-3">
+                <svg className="animate-spin h-8 w-8 text-blue-accent" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span className="text-lg font-medium text-gray-700 dark:text-gray-300">Loading QualityLane...</span>
+            </div>
+        </div>
+    );
+  }
+
+  return (
+    <DataContext.Provider value={value}>
+      {children}
+    </DataContext.Provider>
+  );
 };
 
 export const useData = () => {
   const context = useContext(DataContext);
-  if (!context) throw new Error('useData must be used within a DataProvider');
+  if (!context) {
+    throw new Error('useData must be used within a DataProvider');
+  }
   return context;
 };

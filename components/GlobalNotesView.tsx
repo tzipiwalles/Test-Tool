@@ -54,8 +54,7 @@ interface ProcessedNote extends Note {
         name: string;
         test?: Test;
     };
-    // Fix: Changed from `author?: User` to `author: User | undefined` to more accurately
-    // reflect the object shape created in `processedNotes` and fix the type predicate error.
+    // Fix: Changed author to be explicitly `User | undefined` to resolve a tricky type predicate error.
     author: User | undefined;
     cycle: Cycle;
 }
@@ -74,6 +73,7 @@ const NoteCard: React.FC<{note: ProcessedNote}> = ({ note }) => {
                     </div>
                 </div>
                 <div className="flex items-center flex-shrink-0 ml-4">
+                     {/* Fix: Replaced invalid `title` prop with a child `<title>` element for SVG accessibility. */}
                      {note.isPinned && <PinIcon className="w-4 h-4 text-gray-400 mr-2"><title>Pinned Note</title></PinIcon>}
                     <div className="text-right">
                         <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate" title={note.cycle.name}>{note.cycle.name}</p>
@@ -89,7 +89,7 @@ const NoteCard: React.FC<{note: ProcessedNote}> = ({ note }) => {
 }
 
 
-const GlobalNotesView: React.FC = () => {
+export const GlobalNotesView: React.FC = () => {
     const { notes: allNotes, setNotes, cycleItems, users, tests, cycles, permissions, currentUser } = useData();
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedAuthors, setSelectedAuthors] = useState<string[]>([]);
@@ -291,52 +291,49 @@ const GlobalNotesView: React.FC = () => {
                                 <button onClick={() => setSelectedCycles([])} className="text-xs text-blue-500 hover:underline">Clear</button>
                             )}
                         </div>
-                        <select id="cycle-filter" multiple value={selectedCycles} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedCycles(Array.from(e.target.selectedOptions, option => option.value))} className="mt-1 w-full h-32 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm">
+                        {/* Fix: Replaced Array.from with spread syntax to avoid type inference issues when getting selected options. */}
+                        <select id="cycle-filter" multiple value={selectedCycles} onChange={e => setSelectedCycles([...e.target.selectedOptions].map(option => option.value))} className="mt-1 w-full h-32 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm">
                             {cycles.map(cycle => <option key={cycle.id} value={cycle.id}>{cycle.name}{cycle.version && ` (${cycle.version})`}</option>)}
                         </select>
                     </div>
                     <div>
                         <div className="flex justify-between items-center">
                             <label htmlFor="author-filter" className="text-sm font-semibold text-gray-600 dark:text-gray-300">Filter by Author</label>
-                             {selectedAuthors.length > 0 && (
+                            {selectedAuthors.length > 0 && (
                                 <button onClick={() => setSelectedAuthors([])} className="text-xs text-blue-500 hover:underline">Clear</button>
                             )}
                         </div>
-                        <select id="author-filter" multiple value={selectedAuthors} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedAuthors(Array.from(e.target.selectedOptions, option => option.value))} className="mt-1 w-full h-24 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm">
+                        <select id="author-filter" multiple value={selectedAuthors} onChange={e => setSelectedAuthors([...e.target.selectedOptions].map(option => option.value))} className="mt-1 w-full h-32 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm">
                             {users.map(user => <option key={user.id} value={user.id}>{user.displayName}</option>)}
                         </select>
                     </div>
                      <div>
                         <div className="flex justify-between items-center">
-                           <label htmlFor="type-filter" className="text-sm font-semibold text-gray-600 dark:text-gray-300">Filter by Note Type</label>
+                            <label htmlFor="type-filter" className="text-sm font-semibold text-gray-600 dark:text-gray-300">Filter by Note Type</label>
                             {selectedNoteTypes.length > 0 && (
                                 <button onClick={() => setSelectedNoteTypes([])} className="text-xs text-blue-500 hover:underline">Clear</button>
                             )}
                         </div>
-                        <select id="type-filter" multiple value={selectedNoteTypes} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedNoteTypes(Array.from(e.target.selectedOptions, option => option.value) as NoteParentType[])} className="mt-1 w-full h-24 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm">
-                            {noteParentTypeValues.map(type => <option key={type} value={type} className="capitalize">{type === 'objectType' ? 'Object Type' : type}</option>)}
+                        <select id="type-filter" multiple value={selectedNoteTypes} onChange={e => setSelectedNoteTypes([...e.target.selectedOptions].map(option => option.value as NoteParentType))} className="mt-1 w-full h-24 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm">
+                            {noteParentTypeValues.map(type => <option key={type} value={type} className="capitalize">{type.replace(/_/g, ' ')}</option>)}
                         </select>
                     </div>
                     <div>
-                        <label htmlFor="group-by" className="text-sm font-semibold text-gray-600 dark:text-gray-300">Group Notes By</label>
-                        <select id="group-by" value={groupBy} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setGroupBy(e.target.value as any)} className="mt-1 w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm">
+                        <label htmlFor="group-by" className="text-sm font-semibold text-gray-600 dark:text-gray-300">Group By</label>
+                        <select id="group-by" value={groupBy} onChange={e => setGroupBy(e.target.value as any)} className="mt-1 w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm">
                             <option value="cycle">Cycle</option>
                             <option value="author">Author</option>
                             <option value="type">Note Type</option>
-                            <option value="none">None</option>
+                            <option value="none">None (Chronological)</option>
                         </select>
                     </div>
                 </div>
             </aside>
-
-            <div className="flex-1 flex flex-col overflow-hidden">
+            <main className="flex-1 flex flex-col overflow-hidden">
                 <header className="flex-shrink-0 flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-800">
-                     <div>
-                        <h1 className="text-xl font-bold">Global Notes Review</h1>
-                         <p className="text-sm text-gray-500 dark:text-gray-400">{filteredNotes.length} notes found</p>
-                    </div>
+                    <h1 className="text-2xl font-bold">All Notes ({filteredNotes.length})</h1>
                     <div className="flex items-center space-x-2">
-                        {currentUser?.role === UserRole.MAINTAINER && (
+                        {permissions.canAddNotes && (
                             <button 
                                 onClick={handleImportClick}
                                 title="Import notes from a JSON file"
@@ -356,7 +353,7 @@ const GlobalNotesView: React.FC = () => {
                         </button>
                     </div>
                 </header>
-                <main className="flex-1 overflow-y-auto p-4 space-y-4">
+                 <main className="flex-1 overflow-y-auto p-4 space-y-4">
                     {groupedNotes ? (
                         groupedNotes.map(([groupName, notesInGroup]) => (
                             <div key={groupName}>
@@ -369,11 +366,9 @@ const GlobalNotesView: React.FC = () => {
                     ) : (
                         filteredNotes.map(note => <NoteCard key={note.id} note={note} />)
                     )}
-                    {filteredNotes.length === 0 && <div className="text-center text-gray-500 mt-10">No notes found for the current filters.</div>}
+                    {filteredNotes.length === 0 && <div className="text-center text-gray-500 mt-10">No notes match the current filters.</div>}
                 </main>
-            </div>
+            </main>
         </div>
     );
 };
-
-export default GlobalNotesView;

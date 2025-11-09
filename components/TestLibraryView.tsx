@@ -1,7 +1,6 @@
 
-
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Folder, Test, Priority, TestStatus, TestStep, UUID, TestCreate } from '../types';
+import { Folder, Test, Priority, TestStatus, TestStep, UUID } from '../types';
 import FolderTree from './FolderTree';
 import TestList from './TestList';
 import { PlusIcon } from './icons/PlusIcon';
@@ -12,7 +11,7 @@ import { CollapseAllIcon } from './icons/CollapseAllIcon';
 import { DownloadIcon } from './icons/DownloadIcon';
 import { UploadIcon } from './icons/UploadIcon';
 import { ReviewIcon } from './icons/ReviewIcon';
-import { buildFolderTree } from '../utils';
+import * as api from '../lib/api';
 
 // A generic Modal component for reuse within this view
 const Modal: React.FC<{ children: React.ReactNode; onClose: () => void; title: string }> = ({ children, onClose, title }) => (
@@ -267,26 +266,43 @@ const ImportStatusModal: React.FC<{ status: { message: string, error?: boolean }
   </Modal>
 );
 
-// Maximum number of error details to display in import results
-const MAX_DISPLAYED_ERRORS = 3;
+// Helper to build the folder tree from a flat list
+const buildFolderTree = (
+  folders: Omit<Folder, 'children' | 'tests'>[],
+  tests: Test[]
+): Folder[] => {
+  const folderMap = new Map<UUID, Folder>();
+  const rootFolders: Folder[] = [];
 
-// Helper function to safely extract error message from various error types
-const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === 'string') {
-    return error;
-  }
-  if (error && typeof error === 'object' && 'message' in error) {
-    return String((error as { message: unknown }).message);
-  }
-  return String(error);
+  folders.forEach(f => {
+    folderMap.set(f.id, { ...f, children: [], tests: [] });
+  });
+
+  tests.forEach(test => {
+    const folder = folderMap.get(test.folderId);
+    if (folder) {
+      folder.tests.push(test);
+    }
+  });
+
+  folders.forEach(f => {
+    const folder = folderMap.get(f.id)!;
+    if (f.parentId && folderMap.has(f.parentId)) {
+      const parent = folderMap.get(f.parentId)!;
+      if (!parent.children.some(child => child.id === folder.id)) {
+        parent.children.push(folder);
+      }
+    } else {
+      rootFolders.push(folder);
+    }
+  });
+
+  return rootFolders;
 };
 
 const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> = ({ onStartReview }) => {
-  const { folders, setFolders, tests, createTest, updateTest, bulkUpdateTests, permissions } = useData();
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(folders[0]?.id || null);
+  const { folders, tests, setFolders, setTests, permissions, currentUser } = useData();
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(folders.find(f => f.parentId === null)?.id || null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showArchived, setShowArchived] = useState(false);
 
@@ -416,42 +432,33 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
   }, [tests, selectedFolderId, showArchived, searchTerm, folders, getAllChildFolderIds]);
   
   const handleSaveTest = async (testData: Partial<Test>) => {
-    const { id, status, updatedAt, updatedBy, ...createData } = testData;
-    const payload: TestCreate = {
-      name: createData.name!,
-      folderId: createData.folderId || selectedFolderId!,
-      description: createData.description,
-      steps: createData.steps,
-      labels: createData.labels,
-      priority: createData.priority,
-      affectedObjectType: createData.affectedObjectType,
-      testMethod: createData.testMethod,
-      estimated_duration_sec: createData.estimated_duration_sec,
-      map: createData.map,
-      configuration: createData.configuration,
-    };
-
     try {
-      if (id) { // Edit
-          await updateTest(id, payload);
-      } else { // Create
-          await createTest(payload);
-      }
-      setEditingTest(null);
+        if (testData.id) { // Edit using PUT
+            const { id, status, updatedAt, updatedBy, ...testCreateData } = testData as Test;
+            const updatedTest = await api.updateTest(id, testCreateData);
+            setTests(prev => prev.map(t => t.id === updatedTest.id ? updatedTest : t));
+        } else { // Create using POST
+            const testToCreate = { ...testData, folderId: selectedFolderId! };
+            const newTest = await api.createTest(testToCreate);
+            setTests(prev => [...prev, newTest]);
+        }
     } catch (error) {
-      console.error('Failed to save test:', error);
-      // Keep the modal open so user can see their data and try again
-      alert(`Failed to save test: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        console.error("Failed to save test:", error);
+        alert(`Error saving test: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+        setEditingTest(null);
     }
   };
   
    const handleArchiveTest = async (test: Test) => {
       try {
-        await bulkUpdateTests({ testIds: [test.id], updates: { status: TestStatus.ARCHIVED } });
-        setArchivingTest(null);
+        await api.bulkUpdateTests([test.id], { status: TestStatus.ARCHIVED });
+        setTests(prev => prev.map(t => t.id === test.id ? {...t, status: TestStatus.ARCHIVED} : t));
       } catch (error) {
-        console.error('Failed to archive test:', error);
-        alert(`Failed to archive test: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          console.error("Failed to archive test:", error);
+          alert(`Error archiving test: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        setArchivingTest(null);
       }
   };
 
@@ -459,7 +466,7 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
     const { id, ...testData } = testToDuplicate;
     const newTestForModal: Partial<Test> = {
       ...testData,
-      name: `Copy of ${testData.name}`, 
+      name: `Copy of ${testData.name}`,
     };
     setEditingTest(newTestForModal);
   };
@@ -485,41 +492,41 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
   };
 
   const handleBulkEditSave = async (changes: BulkChanges) => {
+    // Fix: Replaced Array.from with spread syntax to ensure correct type inference.
+    const idsToUpdate = [...selectedTestIds];
     try {
-      await bulkUpdateTests({
-          testIds: Array.from(selectedTestIds),
-          updates: changes
-      });
-      setIsBulkEditModalOpen(false);
-      setSelectedTestIds(new Set());
+        await api.bulkUpdateTests(idsToUpdate, changes);
+        setTests(prev => prev.map(test => 
+            idsToUpdate.includes(test.id) ? { ...test, ...changes, updatedAt: new Date().toLocaleDateString(), updatedBy: currentUser?.displayName || 'System' } : test
+        ));
     } catch (error) {
-      console.error('Failed to bulk update tests:', error);
-      alert(`Failed to update tests: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        console.error("Failed to bulk edit tests:", error);
+        alert(`Error bulk editing tests: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+        setIsBulkEditModalOpen(false);
+        setSelectedTestIds(new Set());
     }
   };
 
   const handleDropTest = async (testId: string, targetFolderId: string) => {
       try {
-        await bulkUpdateTests({ testIds: [testId], updates: { folderId: targetFolderId } });
+        await api.bulkUpdateTests([testId], { folderId: targetFolderId });
+        setTests(prev => prev.map(t => t.id === testId ? { ...t, folderId: targetFolderId } : t));
       } catch (error) {
-        console.error('Failed to move test:', error);
-        alert(`Failed to move test: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          console.error("Failed to move test:", error);
+          alert(`Error moving test: ${error instanceof Error ? error.message : String(error)}`);
       }
   };
   
+  // NOTE: API does not support folder updates/deletes, this will be a local-only operation.
   const handleDropFolder = (folderId: string, targetFolderId: string | null) => {
-      // NOTE: API endpoint for updating a folder is not specified.
-      // This will only update local state.
       setFolders(prev => prev.map(f => f.id === folderId ? { ...f, parentId: targetFolderId } : f));
   };
 
   const handleDeleteFolder = (folderId: string) => {
-    // NOTE: API endpoint for deleting a folder is not specified.
-    // This will only update local state.
     const folderIdsToDelete = [folderId, ...getAllChildFolderIds(folderId, folders)];
     setFolders(prev => prev.filter(f => !folderIdsToDelete.includes(f.id)));
-    // Also remove tests in those folders locally.
-    // setTests(prev => prev.filter(t => !folderIdsToDelete.includes(t.folderId)));
+    setTests(prev => prev.filter(t => !folderIdsToDelete.includes(t.folderId)));
     if (selectedFolderId && folderIdsToDelete.includes(selectedFolderId)) {
         const rootFolder = folders.find(f => !f.parentId);
         setSelectedFolderId(rootFolder ? rootFolder.id : null);
@@ -555,7 +562,7 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
     const date = new Date().toISOString().split('T')[0];
-    link.setAttribute("download", `catalyst_tests_export_${date}.csv`);
+    link.setAttribute("download", `qualitylane_tests_export_${date}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -575,7 +582,7 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
 
       try {
         const csvText = await file.text();
-        await processCSVData(csvText);
+        processCSVData(csvText);
       } catch (error) {
           setImportStatus({ message: `Error reading file: ${error instanceof Error ? error.message : String(error)}`, error: true });
       } finally {
@@ -585,7 +592,9 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
       }
   };
 
-  const processCSVData = async (csvText: string) => {
+  // NOTE: This is a complex operation. For now, it will remain a local-only state update
+  // until a bulk create/update API endpoint is available and integrated.
+  const processCSVData = (csvText: string) => {
     const parseCsv = (text: string): string[][] => {
         const rows: string[][] = [];
         let currentRow: string[] = [];
@@ -656,9 +665,10 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
         return;
     }
 
-    const newTests: TestCreate[] = [];
-    const updatedTests: { id: string, data: TestCreate }[] = [];
-    const skippedTests: { row: number, name: string, reason: string }[] = [];
+    const newTests: Test[] = [];
+    const updatedTests: Test[] = [];
+    const tempNewFolders: Omit<Folder, 'children' | 'tests'>[] = [];
+    const allCurrentFolders = [...folders];
     
     const pathIdCache = new Map<string, string>();
     folders.forEach(f => {
@@ -667,62 +677,6 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
             pathIdCache.set(path, f.id);
         }
     });
-    
-    // Keep track of newly created folders locally
-    const newFolders: Omit<Folder, 'children' | 'tests'>[] = [];
-    let folderIdCounter = 1;
-    if (folders.length > 0) {
-      const existingIds = folders
-        .map(f => {
-          const parts = f.id.split('-');
-          // Validate format is 'f-{number}'
-          if (parts.length === 2 && parts[0] === 'f') {
-            const num = parseInt(parts[1], 10);
-            return isNaN(num) ? 0 : num;
-          }
-          return 0;
-        })
-        .filter(id => id > 0);
-      folderIdCounter = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1;
-    }
-    
-    // Helper function to create folder hierarchy from a path
-    const ensureFolderPath = (path: string): UUID => {
-      if (pathIdCache.has(path)) {
-        return pathIdCache.get(path)!;
-      }
-      
-      // Parse the path and create folders as needed
-      const parts = path.split('/').filter(p => p.length > 0);
-      if (parts.length === 0) {
-        throw new Error('Invalid folder path: path is empty');
-      }
-      
-      let currentPath = '';
-      let parentId: UUID | null = null;
-      
-      for (const part of parts) {
-        currentPath += '/' + part;
-        
-        if (pathIdCache.has(currentPath)) {
-          parentId = pathIdCache.get(currentPath)!;
-        } else {
-          // Create new folder
-          const newFolderId = `f-${folderIdCounter++}`;
-          const newFolder: Omit<Folder, 'children' | 'tests'> = {
-            id: newFolderId,
-            name: part,
-            parentId: parentId,
-            path: currentPath
-          };
-          newFolders.push(newFolder);
-          pathIdCache.set(currentPath, newFolderId);
-          parentId = newFolderId;
-        }
-      }
-      
-      return parentId!;
-    };
     
     let errors: string[] = [];
 
@@ -734,17 +688,42 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
           return;
       }
       
-      // Ensure folder path exists, creating it if necessary
       let folderId: UUID;
-      try {
-        folderId = ensureFolderPath(row.folderPath);
-      } catch (error) {
-        skippedTests.push({
-          row: index + 2,
-          name: row.name,
-          reason: `Failed to create folder path "${row.folderPath}": ${error instanceof Error ? error.message : String(error)}`
-        });
-        return;
+      if (pathIdCache.has(row.folderPath)) {
+          folderId = pathIdCache.get(row.folderPath)!;
+      } else {
+          const pathParts = row.folderPath.split('/').filter(p => p);
+          let currentParentId: UUID | null = null;
+          let currentPath = '';
+
+          for (const part of pathParts) {
+              currentPath += `/${part}`;
+              if (pathIdCache.has(currentPath)) {
+                  currentParentId = pathIdCache.get(currentPath)!;
+              } else {
+                  const newFolder: Omit<Folder, 'children' | 'tests'> = {
+                      id: `f-${Date.now()}-${Math.random().toString(36).substring(2,9)}`,
+                      name: part,
+                      parentId: currentParentId,
+                      path: currentPath,
+                  };
+                  tempNewFolders.push(newFolder);
+                  allCurrentFolders.push(newFolder);
+                  pathIdCache.set(currentPath, newFolder.id);
+                  currentParentId = newFolder.id;
+              }
+          }
+          if (currentParentId) {
+            folderId = currentParentId;
+          } else {
+            const rootFolder = allCurrentFolders.find(f => !f.parentId);
+            if(rootFolder) {
+              folderId = rootFolder.id;
+            } else {
+              errors.push(`Row ${index + 2}: Could not determine folder for path "${row.folderPath}" and no root folder found.`);
+              return;
+            }
+          }
       }
       
       const steps: TestStep[] = (row.steps || '').split('@@').map((s, i) => {
@@ -752,9 +731,10 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
           return { step_no: i + 1, action: action || '', expected: expected || '' };
       }).filter(s => s.action || s.expected);
       
-      const testData: TestCreate = {
+      const testData = {
           name: row.name,
           folderId,
+          status: Object.values(TestStatus).includes(row.status as TestStatus) ? row.status as TestStatus : TestStatus.ACTIVE,
           description: row.description || '',
           steps,
           labels: (row.labels || '').split(',').map(l => l.trim()).filter(Boolean),
@@ -762,15 +742,17 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
           affectedObjectType: row.affectedObjectType,
           testMethod: row.testMethod,
           estimated_duration_sec: parseInt(row.estimated_duration_sec, 10) || 60,
+          updatedAt: new Date().toLocaleDateString(),
+          updatedBy: currentUser?.displayName || 'System',
           map: row.map,
           configuration: row.configuration
       };
 
       const existingTest = tests.find(t => t.id === row.id);
       if (existingTest) {
-          updatedTests.push({ id: existingTest.id, data: testData });
+          updatedTests.push({ ...existingTest, ...testData });
       } else {
-          newTests.push(testData);
+          newTests.push({ ...testData, id: row.id || `t-${Date.now()}-${index}` });
       }
     });
 
@@ -779,70 +761,22 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
       return;
     }
 
-    if (newTests.length === 0 && updatedTests.length === 0) {
-      const message = skippedTests.length > 0 
-        ? `No tests to import. All ${skippedTests.length} tests were skipped:\n${skippedTests.slice(0, 5).map(s => `Row ${s.row}: ${s.reason}`).join('\n')}${skippedTests.length > 5 ? '\n...' : ''}`
-        : 'No tests to import.';
-      setImportStatus({ message, error: true });
-      return;
+    if (tempNewFolders.length > 0) {
+        setFolders(prev => {
+            const existingIds = new Set(prev.map(f => f.id));
+            const uniqueNewFolders = tempNewFolders.filter(f => !existingIds.has(f.id));
+            return [...prev, ...uniqueNewFolders];
+        });
+    }
+    if (newTests.length > 0 || updatedTests.length > 0) {
+        setTests(prev => {
+            const updatedIds = new Set(updatedTests.map(t => t.id));
+            const oldTests = prev.filter(t => !updatedIds.has(t.id));
+            return [...oldTests, ...updatedTests, ...newTests];
+        });
     }
 
-    setImportStatus({ message: `Importing ${newTests.length} new tests and updating ${updatedTests.length} tests...` });
-
-    // Use Promise.allSettled to handle errors gracefully and continue processing
-    // Process both creates and updates concurrently for better performance
-    const allResults = await Promise.allSettled([
-      ...newTests.map(t => createTest(t)),
-      ...updatedTests.map(t => updateTest(t.id, t.data))
-    ]);
-    
-    // Separate results by operation type
-    const createResults = allResults.slice(0, newTests.length);
-    const updateResults = allResults.slice(newTests.length);
-    
-    // Count successes and failures
-    const createSuccess = createResults.filter(r => r.status === 'fulfilled').length;
-    const createFailed = createResults.filter(r => r.status === 'rejected').length;
-    const updateSuccess = updateResults.filter(r => r.status === 'fulfilled').length;
-    const updateFailed = updateResults.filter(r => r.status === 'rejected').length;
-
-    // Add newly created folders to the state after tests are successfully processed
-    // This ensures folders are only added if there's actual progress
-    if (newFolders.length > 0 && (createSuccess > 0 || updateSuccess > 0)) {
-      setFolders(prev => [...prev, ...newFolders]);
-    }
-
-    // Collect error details
-    const failedDetails: string[] = [];
-    createResults.forEach((result, index) => {
-      if (result.status === 'rejected') {
-        failedDetails.push(`Create test "${newTests[index].name}": ${getErrorMessage(result.reason)}`);
-      }
-    });
-    updateResults.forEach((result, index) => {
-      if (result.status === 'rejected') {
-        failedDetails.push(`Update test "${updatedTests[index].data.name}": ${getErrorMessage(result.reason)}`);
-      }
-    });
-    
-    // Build result message
-    let resultMessage = 'Import completed:\n';
-    if (newFolders.length > 0) resultMessage += `✓ ${newFolders.length} folders created\n`;
-    if (createSuccess > 0) resultMessage += `✓ ${createSuccess} tests created\n`;
-    if (updateSuccess > 0) resultMessage += `✓ ${updateSuccess} tests updated\n`;
-    if (skippedTests.length > 0) resultMessage += `⚠ ${skippedTests.length} tests skipped\n`;
-    if (createFailed > 0 || updateFailed > 0) {
-      resultMessage += `✗ ${createFailed + updateFailed} tests failed\n`;
-      resultMessage += '\nFailure details:\n' + failedDetails.slice(0, MAX_DISPLAYED_ERRORS).join('\n');
-      if (failedDetails.length > MAX_DISPLAYED_ERRORS) resultMessage += `\n... and ${failedDetails.length - MAX_DISPLAYED_ERRORS} more errors`;
-    }
-    
-    const hasErrors = createFailed > 0 || updateFailed > 0 || skippedTests.length > 0;
-    setImportStatus({ message: resultMessage, error: hasErrors });
-  
-    // After import, select the root folder to ensure imported tests are visible.
-    const rootFolder = folders.find(f => !f.parentId);
-    setSelectedFolderId(rootFolder ? rootFolder.id : (folders[0]?.id || null));
+    setImportStatus({ message: `Import successful!\n- ${newTests.length} tests created.\n- ${updatedTests.length} tests updated.\n- ${tempNewFolders.length} folders created.` });
   };
 
 
@@ -941,7 +875,8 @@ const TestLibraryView: React.FC<{ onStartReview: (testIds: string[]) => void }> 
                     {selectedTestIds.size > 0 && (
                         <>
                             <button 
-                                onClick={() => onStartReview(Array.from(selectedTestIds))}
+                                // Fix: Used spread syntax to correctly convert the Set of test IDs to a string array.
+                                onClick={() => onStartReview([...selectedTestIds])}
                                 className="flex items-center text-sm px-3 py-1.5 rounded-md bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800/50"
                             >
                                 <ReviewIcon className="w-4 h-4 mr-2" />

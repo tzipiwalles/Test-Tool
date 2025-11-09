@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { Cycle, CycleItem, CycleItemResult, CycleStatus, Scope, ScopeName, Test, CycleMapInfo, CycleType } from '../types';
-import CycleBuilder from './CycleBuilder';
+// Fix: Changed import of 'CycleBuilder' to a named import as it does not have a default export.
+import { CycleBuilder } from './CycleBuilder';
 import { PlusIcon } from './icons/PlusIcon';
 import { useData } from './DataContext';
 import { CopyIcon } from './icons/CopyIcon';
@@ -8,6 +9,7 @@ import { TrashIcon } from './icons/TrashIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { UploadIcon } from './icons/UploadIcon';
 import { ExportIcon } from './icons/ExportIcon';
+import * as api from '../lib/api';
 
 const ConfirmationModal: React.FC<{
   title: string;
@@ -80,14 +82,16 @@ const ImportStatusModal: React.FC<{ status: { message: string, error?: boolean }
   </Modal>
 );
 
-const NewCycleModal: React.FC<{ onClose: () => void; onCreate: (data: { name: string; description: string; labels: string }) => void; }> = ({ onClose, onCreate }) => {
+const NewCycleModal: React.FC<{ onClose: () => void; onCreate: (data: { name: string; description: string; labels: string; version: string; cycleType: CycleType; }) => void; }> = ({ onClose, onCreate }) => {
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [labels, setLabels] = useState('');
+    const [version, setVersion] = useState('');
+    const [cycleType, setCycleType] = useState<CycleType>(CycleType.REGRESSION);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onCreate({ name, description, labels });
+        onCreate({ name, description, labels, version, cycleType });
     };
     
     return (
@@ -98,6 +102,18 @@ const NewCycleModal: React.FC<{ onClose: () => void; onCreate: (data: { name: st
                 <div>
                     <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Cycle Name</label>
                     <input type="text" value={name} onChange={e => setName(e.target.value)} required autoFocus className="mt-1 w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2"/>
+                </div>
+                 <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Version</label>
+                        <input type="text" value={version} onChange={e => setVersion(e.target.value)} required placeholder="e.g. 24.1.0" className="mt-1 w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2"/>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Cycle Type</label>
+                        <select value={cycleType} onChange={e => setCycleType(e.target.value as CycleType)} required className="mt-1 w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 capitalize">
+                            {Object.values(CycleType).map(ct => <option key={ct} value={ct}>{ct.replace(/_/g, ' ')}</option>)}
+                        </select>
+                    </div>
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-600 dark:text-gray-300">Description</label>
@@ -158,7 +174,7 @@ const CycleProgress: React.FC<{ items: CycleItem[] }> = ({ items }) => {
 
 
 const CyclesView: React.FC = () => {
-  const { cycles, setCycles, cycleItems, setCycleItems, scopes, setScopes, permissions, users, tests, createCycle } = useData();
+  const { cycles, setCycles, cycleItems, setCycleItems, scopes, setScopes, permissions, users, tests } = useData();
   const [selectedCycle, setSelectedCycle] = useState<Cycle | null>(null);
   const [isNewCycleModalOpen, setIsNewCycleModalOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
@@ -167,43 +183,57 @@ const CyclesView: React.FC = () => {
   const [importStatus, setImportStatus] = useState<{message: string, error?: boolean} | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleCreateCycle = (cycleData: { name: string; description: string; labels: string }) => {
-    // NOTE: version, refVersion, cycleType, mapsInfo are not in the modal.
-    // The backend seems to require them. Sending empty/default values.
-    const newCycleData = {
-        name: cycleData.name,
-        description: cycleData.description,
-        labels: cycleData.labels.split(',').map(l => l.trim()).filter(Boolean),
-        version: "1.0", // Default value
-        cycleType: CycleType.REGRESSION // Default value
-    };
-    createCycle(newCycleData);
-    setIsNewCycleModalOpen(false);
+  const handleCreateCycle = async (cycleData: { name: string; description: string; labels: string; version: string; cycleType: CycleType; }) => {
+    try {
+        const cycleToCreate = {
+            name: cycleData.name,
+            description: cycleData.description,
+            labels: cycleData.labels.split(',').map(l => l.trim()).filter(Boolean),
+            version: cycleData.version,
+            cycleType: cycleData.cycleType,
+        };
+        const newCycle = await api.createCycle(cycleToCreate);
+        
+        // The API returns the created cycle. Add it to our state.
+        setCycles(prev => [newCycle, ...prev]);
+
+        // NOTE: The backend does not automatically create a default scope.
+        // We will add one to the local state for a better UX. This scope won't be persisted.
+        const newScope: Scope = {
+            id: `s-${Date.now()}`, // Temporary local ID
+            cycleId: newCycle.id,
+            name: ScopeName.NONE,
+        };
+        setScopes(prev => [...prev, newScope]);
+        
+    } catch (error) {
+        console.error("Failed to create cycle:", error);
+        alert(`Error creating cycle: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+        setIsNewCycleModalOpen(false);
+    }
   };
 
   const handleUpdateCycle = (updatedCycle: Cycle) => {
-    // NOTE: API endpoint for updating a cycle is not specified.
-    // This will only update local state.
+    // NOTE: API doesn't have an endpoint to update a cycle. This will be a local-only operation.
     setCycles(prev => prev.map(c => c.id === updatedCycle.id ? updatedCycle : c));
     setSelectedCycle(updatedCycle);
   };
 
   const handleDuplicateCycle = (cycleToDuplicate: Cycle) => {
-    // NOTE: This logic is complex and relies on a complete view of data.
-    // Without a backend endpoint, this is a client-side only operation.
+    // NOTE: This operation is complex and not fully supported by the current API schema
+    // (e.g., creating scopes and items in bulk). This will be a local-only operation.
     const newCycle: Cycle = {
         ...cycleToDuplicate,
         id: `c-${Date.now()}`,
         name: `Copy of ${cycleToDuplicate.name}`,
         status: CycleStatus.DRAFT,
-        version: '', // Clear version
-        refVersion: '', // Clear ref version
+        version: '', 
+        refVersion: '',
         updatedAt: new Date().toLocaleDateString(),
         mapsInfo: (cycleToDuplicate.mapsInfo || []).map(info => ({
             id: `mi-${Date.now()}-${Math.random().toString(36).substring(2,9)}`,
-            mapName: info.mapName, // Keep map name
-            mainMapLink: undefined,
-            refMapLink: undefined,
+            mapName: info.mapName,
         })),
     };
 
@@ -212,20 +242,13 @@ const CyclesView: React.FC = () => {
     const newScopes: Scope[] = oldScopes.map(scope => {
         const newScopeId = `s-${Date.now()}-${Math.random().toString(36).substring(2,9)}`;
         oldToNewScopeIdMap.set(scope.id, newScopeId);
-        return {
-            ...scope,
-            id: newScopeId,
-            cycleId: newCycle.id,
-        };
+        return { ...scope, id: newScopeId, cycleId: newCycle.id };
     });
 
     const oldCycleItems = cycleItems.filter(item => item.cycleId === cycleToDuplicate.id);
     const newCycleItems: CycleItem[] = oldCycleItems.map(item => {
         const newScopeId = oldToNewScopeIdMap.get(item.scopeId);
-        if (!newScopeId) {
-            console.warn(`Could not find new scope for old scope ${item.scopeId}`);
-            return null;
-        }
+        if (!newScopeId) return null;
         return {
             ...item,
             id: `ci-${Date.now()}-${item.testId}-${Math.random().toString(36).substring(2, 9)}`,
@@ -243,9 +266,8 @@ const CyclesView: React.FC = () => {
   };
 
   const handleArchiveCycle = () => {
+    // NOTE: API doesn't have an endpoint to archive a cycle. This will be a local-only operation.
     if (!archivingCycle) return;
-    // NOTE: API endpoint for archiving/updating a cycle is not specified.
-    // This will only update local state.
     setCycles(prev => prev.map(c => c.id === archivingCycle.id ? { ...c, status: CycleStatus.ARCHIVED } : c));
     setArchivingCycle(null);
   };
@@ -300,7 +322,7 @@ const CyclesView: React.FC = () => {
     link.setAttribute("href", url);
     const date = new Date().toISOString().split('T')[0];
     const safeCycleName = cycle.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    link.setAttribute("download", `catalyst_cycle_${safeCycleName}_${date}.csv`);
+    link.setAttribute("download", `qualitylane_cycle_${safeCycleName}_${date}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -330,9 +352,8 @@ const CyclesView: React.FC = () => {
       }
   };
 
+  // NOTE: This is a complex operation. For now, it will remain a local-only state update.
   const processCycleCSVData = (csvText: string) => {
-    // NOTE: This is a complex operation that should ideally be handled
-    // by a dedicated backend endpoint. This implementation is client-side only.
     const parseCsv = (text: string): string[][] => {
         const rows: string[][] = [];
         let currentRow: string[] = [];

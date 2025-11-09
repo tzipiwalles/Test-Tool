@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import TestLibraryView from './components/TestLibraryView';
 import CyclesView from './components/CyclesView';
@@ -10,7 +11,8 @@ import { MoonIcon } from './components/icons/MoonIcon';
 import Header from './components/Header';
 import TestPlanReviewView from './components/TestPlanReviewView';
 import { ReviewIcon } from './components/icons/ReviewIcon';
-import GlobalNotesView from './components/GlobalNotesView';
+// Fix: Changed import to be a named import as GlobalNotesView does not have a default export.
+import { GlobalNotesView } from './components/GlobalNotesView';
 
 type View = 'library' | 'cycles' | 'notes';
 
