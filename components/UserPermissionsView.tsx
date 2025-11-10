@@ -36,7 +36,26 @@ export const UserPermissionsView: React.FC = () => {
     );
   };
 
-  const selectedUser = users.find(u => u.id === selectedUserId);
+  const selectedUser = users ? users.find(u => u.id === selectedUserId) : null;
+
+  // Handle case where users haven't loaded yet
+  if (!users || users.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-950">
+        <div className="text-center">
+          <div className="mb-4 text-gray-400 dark:text-gray-600">
+            <UserIcon className="w-16 h-16 mx-auto" />
+          </div>
+          <h2 className="text-2xl font-semibold text-gray-700 dark:text-gray-300 mb-2">
+            No Users Found
+          </h2>
+          <p className="text-gray-500 dark:text-gray-400">
+            User data is still loading or unavailable.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // Only maintainers can access this view
   if (!permissions.canEditLibrary) {

@@ -120,7 +120,20 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       } catch (error) {
         console.error("Failed to fetch initial data from backend:", error);
-        // In a real app, we would set an error state here to show a message to the user.
+        // Use mock data as fallback when API is not available
+        const { mockUsers } = await import('../data/mockData');
+        setUsers(mockUsers);
+        if (mockUsers.length > 0) {
+          const maintainer = mockUsers.find(u => u.role === UserRole.MAINTAINER) || mockUsers[0];
+          setCurrentUser(maintainer);
+        }
+        setFolders([]);
+        setTests([]);
+        setCycles([]);
+        setScopes([]);
+        setCycleItems([]);
+        setMaps([]);
+        setConfigurations([]);
       } finally {
         setIsLoading(false);
       }
