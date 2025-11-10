@@ -554,3 +554,28 @@ const AddTestsModal: React.FC<{
           </main>
         </div>
         <div className="flex justify-between items-center space-x-3 p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 rounded-b-lg">
+          <div className="text-sm text-gray-600 dark:text-gray-300">
+            {selectedTests.size} test{selectedTests.size !== 1 ? 's' : ''} selected
+          </div>
+          <div className="flex space-x-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={selectedTests.size === 0}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-accent rounded-md hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
+            >
+              Add Selected
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export const CycleBuilder: React.FC = () => <div>CycleBuilder placeholder</div>;
