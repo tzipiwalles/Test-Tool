@@ -13,8 +13,10 @@ import TestPlanReviewView from './components/TestPlanReviewView';
 import { ReviewIcon } from './components/icons/ReviewIcon';
 // Fix: Changed import to be a named import as GlobalNotesView does not have a default export.
 import { GlobalNotesView } from './components/GlobalNotesView';
+import { UserPermissionsView } from './components/UserPermissionsView';
+import { SettingsIcon } from './components/icons/SettingsIcon';
 
-type View = 'library' | 'cycles' | 'notes';
+type View = 'library' | 'cycles' | 'notes' | 'permissions';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('library');
@@ -25,6 +27,7 @@ const App: React.FC = () => {
     { id: 'library', label: 'Test Library', icon: <ArchiveIcon /> },
     { id: 'cycles', label: 'Test Cycles', icon: <PlayIcon /> },
     { id: 'notes', label: 'Notes Review', icon: <ReviewIcon /> },
+    { id: 'permissions', label: 'User Permissions', icon: <SettingsIcon /> },
   ];
 
   if (reviewingTestIds) {
@@ -49,7 +52,7 @@ const App: React.FC = () => {
                 title={item.label}
               >
                 {item.icon}
-                <span className="text-xs mt-1">{item.label.split(' ')[1]}</span>
+                <span className="text-xs mt-1">{item.label.split(' ').slice(-1)[0]}</span>
               </button>
             ))}
           </div>
@@ -69,6 +72,7 @@ const App: React.FC = () => {
           {currentView === 'library' && <TestLibraryView onStartReview={setReviewingTestIds} />}
           {currentView === 'cycles' && <CyclesView />}
           {currentView === 'notes' && <GlobalNotesView />}
+          {currentView === 'permissions' && <UserPermissionsView />}
         </main>
       </div>
     </div>

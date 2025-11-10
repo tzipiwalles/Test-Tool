@@ -101,3 +101,9 @@ export const bulkUpdateCycleItems = (itemIds: string[], updates: BulkCycleItemUp
     method: 'PATCH',
     body: JSON.stringify({ itemIds, updates }),
 });
+
+// --- User Management ---
+export const updateUserRole = (userId: string, role: string): Promise<User> => apiFetch(`/users/${userId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ role }),
+});
